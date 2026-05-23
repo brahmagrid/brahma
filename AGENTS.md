@@ -85,6 +85,16 @@ curl http://localhost:8420/agents
 - **API keys:** Set in `.env` (copy from .env.example)
 - **Provider format:** `provider:model_name` (e.g., `deepseek:deepseek-chat`, `anthropic:claude-sonnet-4-20250514`)
 
+## Type Discipline (NON-NEGOTIABLE)
+
+1. **All classes must have type annotations** — every `__init__` parameter, every method
+   signature, every return type.
+2. **All public functions and classes must have docstrings** — at minimum a one-line
+   summary; for non-trivial logic, include `Args:`/`Returns:`/`Raises:`.
+3. **When a function signature changes, update the docstring immediately** — stale
+   docs are worse than no docs.
+4. This applies to ALL code in this repo: `brahma/`, `tests/`, scripts, everything.
+
 ## Agent Rules
 
 1. Use `uv` for all Python operations — never `pip`

@@ -6,10 +6,10 @@ Starts with only meta-capabilities and generates all other capabilities at runti
 """
 
 from brahma.agent import Agent
-from brahma.tools import bootstrap_tools, ToolRegistry
-from brahma.models import call_model, ModelResponse
 from brahma.bootstrap import BOOTSTRAP_PROMPT
+from brahma.models import ModelResponse, call_model
 from brahma.server import create_app
+from brahma.tools import ToolRegistry, bootstrap_tools
 
 __all__ = [
     "Agent",

@@ -5,7 +5,9 @@ This is the default system prompt for the Brahma god agent.
 It defines the 4 meta-capabilities and the self-extending behavior.
 """
 
-BOOTSTRAP_PROMPT = """You are Brahma, a creator agent. You are the spawn point for a self-organizing agent system.
+BOOTSTRAP_PROMPT = """\
+You are Brahma, a creator agent. You are the spawn point for a
+self-organizing agent system.
 
 ## Your Meta-Capabilities
 

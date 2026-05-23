@@ -7,24 +7,24 @@ A minimal, self-extending agent runtime. Starts with only meta-capabilities
 Architecture: Think → Act → Observe → Repeat
 """
 
-import json
-import time
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from __future__ import annotations
 
-from brahma.models import call_model
+from dataclasses import dataclass, field
+
+from brahma.models import ModelResponse, call_model
 from brahma.tools import ToolRegistry, ToolResult
 
 
 @dataclass
 class Agent:
     """
-    The Brahma agent loop. Minimal by design — 4 bootstrap tools + task execution.
+    The Brahma agent loop. Minimal by design — bootstrap tools + task execution.
 
-    system_prompt: The bootstrap meta-capability prompt.
-    model: Provider + model name (e.g., "anthropic:claude-sonnet-4-20250514").
-    tools: Registry of available tool functions.
-    max_turns: Safety limit — maximum LLM calls per task.
+    Args:
+        system_prompt: The bootstrap meta-capability prompt.
+        model: Provider + model name (e.g., "anthropic:claude-sonnet-4-20250514").
+        tools: Registry of available tool functions.
+        max_turns: Safety limit — maximum LLM calls per task.
     """
 
     system_prompt: str
@@ -37,7 +37,8 @@ class Agent:
     _turn_count: int = field(default=0, init=False, repr=False)
     _token_usage: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Initialize the message history with the system prompt."""
         self._messages = [{"role": "system", "content": self.system_prompt}]
 
     # ── Public API ──────────────────────────────────────────────────
@@ -76,7 +77,8 @@ class Agent:
     # ── Internal ────────────────────────────────────────────────────
 
     def _execute_tools(self, tool_calls: list[dict]) -> list[ToolResult]:
-        results = []
+        """Execute each tool call and collect results."""
+        results: list[ToolResult] = []
         for call in tool_calls:
             tool_name = call.get("name", "unknown")
             tool_input = call.get("input", {})
@@ -97,7 +99,8 @@ class Agent:
 
         return results
 
-    def _accumulate_tokens(self, response: "ModelResponse") -> None:
+    def _accumulate_tokens(self, response: ModelResponse) -> None:
+        """Add token usage from a model response to the running totals."""
         self._token_usage["input"] += response.usage.input_tokens
         self._token_usage["output"] += response.usage.output_tokens
         self._token_usage["total"] += response.usage.input_tokens + response.usage.output_tokens
@@ -107,21 +110,21 @@ class Agent:
     @property
     def context_tokens(self) -> int:
         """Estimate context usage by counting characters / 4 (rough token estimate)."""
-        total_chars = sum(
-            len(_serialize_content(msg.get("content", ""))) for msg in self._messages
-        )
+        total_chars = sum(len(_serialize_content(msg.get("content", ""))) for msg in self._messages)
         return total_chars // 4
 
     @property
     def turn_count(self) -> int:
+        """Current turn number (increments each LLM call)."""
         return self._turn_count
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
+
 def _tool_results_message(results: list[ToolResult]) -> dict:
     """Build a user message containing tool results."""
-    content = []
+    content: list[dict] = []
     for r in results:
         block = {
             "type": "tool_result",
@@ -133,13 +136,18 @@ def _tool_results_message(results: list[ToolResult]) -> dict:
     return {"role": "user", "content": content}
 
 
-def _serialize_content(content: Any) -> str:
+def _serialize_content(content: object) -> str:
     """Coerce message content to a string for token estimation."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         return "".join(
-            block.get("text", "") if isinstance(block, dict) else str(block)
+            _extract_text(block) if isinstance(block, dict) else str(block)
             for block in content
         )
     return str(content)
+
+
+def _extract_text(block: dict) -> str:
+    """Extract the text field from a content block dict."""
+    return block.get("text", "")

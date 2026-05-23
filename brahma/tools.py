@@ -11,16 +11,17 @@ All other tools are generated at runtime by the agent itself.
 from __future__ import annotations
 
 import subprocess
-import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
-
 
 # ── Tool Result ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class ToolResult:
+    """Result of a single tool execution, including success/failure metadata."""
+
     tool: str
     success: bool
     output: str
@@ -30,16 +31,19 @@ class ToolResult:
 
 # ── Tool Registry ──────────────────────────────────────────────────────
 
+
 @dataclass
 class ToolRegistry:
     """
     Holds available tools: name → (callable, schema).
+
     Schema is the JSON Schema for the tool's input parameters.
     """
 
     _tools: dict[str, tuple[Callable, dict]] = field(default_factory=dict)
 
     def register(self, name: str, fn: Callable, schema: dict) -> None:
+        """Register a tool function with its JSON Schema."""
         self._tools[name] = (fn, schema)
 
     def schemas(self) -> list[dict]:
@@ -54,6 +58,7 @@ class ToolRegistry:
         ]
 
     def execute(self, name: str, params: dict) -> ToolResult:
+        """Execute a tool by name with the given parameters."""
         if name not in self._tools:
             return ToolResult(tool=name, success=False, output="", error=f"Unknown tool: {name}")
 
@@ -65,22 +70,27 @@ class ToolRegistry:
             return ToolResult(tool=name, success=False, output="", error=str(exc))
 
     def get(self, name: str) -> Callable | None:
+        """Look up a tool function by name, or None if not registered."""
         entry = self._tools.get(name)
         return entry[0] if entry else None
 
     def __contains__(self, name: str) -> bool:
+        """Check if a tool is registered."""
         return name in self._tools
 
     def __len__(self) -> int:
+        """Return the number of registered tools."""
         return len(self._tools)
 
-    def list(self) -> list[str]:
+    def list_tools(self) -> list[str]:
+        """Return a list of all registered tool names."""
         return list(self._tools.keys())
 
 
 # ── Bootstrap Tool Implementations ─────────────────────────────────────
 
 # --- read_file ---
+
 
 def _read_file(path: str, offset: int = 1, limit: int = 500) -> str:
     """Read a text file with line numbers."""
@@ -110,16 +120,27 @@ READ_FILE_SCHEMA = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Absolute or relative path to the file."},
-            "offset": {"type": "integer", "description": "Line number to start from (1-indexed).", "default": 1},
-            "limit": {"type": "integer", "description": "Maximum lines to return.", "default": 500},
+            "path": {
+                "type": "string",
+                "description": "Absolute or relative path to the file.",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Line number to start from (1-indexed).",
+                "default": 1,
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum lines to return.",
+                "default": 500,
+            },
         },
         "required": ["path"],
     },
 }
 
-
 # --- write_file ---
+
 
 def _write_file(path: str, content: str) -> str:
     """Write content to a file. Creates parent directories."""
@@ -131,19 +152,24 @@ def _write_file(path: str, content: str) -> str:
 
 
 WRITE_FILE_SCHEMA = {
-    "description": "Write content to a file. Creates parent directories. Overwrites existing files.",
+    "description": (
+        "Write content to a file. Creates parent directories. Overwrites existing files."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Path to the file to write."},
-            "content": {"type": "string", "description": "Complete content to write."},
+            "content": {
+                "type": "string",
+                "description": "Complete content to write.",
+            },
         },
         "required": ["path", "content"],
     },
 }
 
-
 # --- search_files ---
+
 
 def _search_files(pattern: str, path: str = ".", file_glob: str | None = None) -> str:
     """Search file contents with ripgrep. Falls back to grep if rg unavailable."""
@@ -177,20 +203,30 @@ def _search_files(pattern: str, path: str = ".", file_glob: str | None = None) -
 
 
 SEARCH_FILES_SCHEMA = {
-    "description": "Search file contents with ripgrep. Use for finding code, patterns, or text.",
+    "description": ("Search file contents with ripgrep. Use for finding code, patterns, or text."),
     "input_schema": {
         "type": "object",
         "properties": {
-            "pattern": {"type": "string", "description": "Regex pattern to search for."},
-            "path": {"type": "string", "description": "Directory to search in.", "default": "."},
-            "file_glob": {"type": "string", "description": "Optional file glob filter (e.g., '*.py')."},
+            "pattern": {
+                "type": "string",
+                "description": "Regex pattern to search for.",
+            },
+            "path": {
+                "type": "string",
+                "description": "Directory to search in.",
+                "default": ".",
+            },
+            "file_glob": {
+                "type": "string",
+                "description": "Optional file glob filter (e.g., '*.py').",
+            },
         },
         "required": ["pattern"],
     },
 }
 
-
 # --- terminal ---
+
 
 def _terminal(command: str, timeout: int = 120) -> str:
     """Execute a shell command."""
@@ -214,24 +250,33 @@ def _terminal(command: str, timeout: int = 120) -> str:
 
 
 TERMINAL_SCHEMA = {
-    "description": "Execute a shell command. Use for builds, git, package management, and running scripts.",
+    "description": (
+        "Execute a shell command. Use for builds, git, package management, and running scripts."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "command": {"type": "string", "description": "The shell command to execute."},
-            "timeout": {"type": "integer", "description": "Max seconds to wait.", "default": 120},
+            "command": {
+                "type": "string",
+                "description": "The shell command to execute.",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Max seconds to wait.",
+                "default": 120,
+            },
         },
         "required": ["command"],
     },
 }
 
-
 # --- delegate_task ---
+
 
 def _delegate_task(goal: str, context: str = "", tools: list[str] | None = None) -> str:
     """
     Spawn a child agent to work on a task independently.
-    
+
     This is the spawn meta-capability. In MVP, it creates a new Agent instance
     with a subset of tools and runs it in-process. Future: subprocess/K8s Job.
     """
@@ -241,7 +286,7 @@ def _delegate_task(goal: str, context: str = "", tools: list[str] | None = None)
 
     # Build child's toolset
     child_tools = ToolRegistry()
-    for tool_name in (tools or ["read_file", "write_file", "search_files", "terminal"]):
+    for _tool_name in tools or ["read_file", "write_file", "search_files", "terminal"]:
         # Inherit tool from parent if available
         pass  # Child gets its own minimal toolset — see spawn() below
 
@@ -260,12 +305,18 @@ def _delegate_task(goal: str, context: str = "", tools: list[str] | None = None)
 
 
 DELEGATE_TASK_SCHEMA = {
-    "description": "Spawn a child Brahma agent to work on a subtask independently.",
+    "description": ("Spawn a child Brahma agent to work on a subtask independently."),
     "input_schema": {
         "type": "object",
         "properties": {
-            "goal": {"type": "string", "description": "What the child agent should accomplish."},
-            "context": {"type": "string", "description": "Background information for the child agent."},
+            "goal": {
+                "type": "string",
+                "description": "What the child agent should accomplish.",
+            },
+            "context": {
+                "type": "string",
+                "description": "Background information for the child agent.",
+            },
             "tools": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -276,7 +327,6 @@ DELEGATE_TASK_SCHEMA = {
     },
 }
 
-
 # --- skill_manage ---
 
 SKILLS_DIR = Path.home() / ".brahma" / "skills"
@@ -285,7 +335,7 @@ SKILLS_DIR = Path.home() / ".brahma" / "skills"
 def _skill_manage(action: str, name: str, content: str = "") -> str:
     """
     Manage skills — save, load, list, or delete.
-    
+
     This is the 'save' meta-capability. Skills persist on disk.
     """
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
@@ -319,7 +369,10 @@ def _skill_manage(action: str, name: str, content: str = "") -> str:
 
 
 SKILL_MANAGE_SCHEMA = {
-    "description": "Manage persistent skills — save, load, list, or delete. Skills are saved to ~/.brahma/skills/.",
+    "description": (
+        "Manage persistent skills — save, load, list, or delete."
+        " Skills are saved to ~/.brahma/skills/."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
@@ -328,15 +381,21 @@ SKILL_MANAGE_SCHEMA = {
                 "enum": ["save", "load", "list", "delete"],
                 "description": "Action to perform.",
             },
-            "name": {"type": "string", "description": "Skill name (without extension)."},
-            "content": {"type": "string", "description": "Skill content (required for 'save')."},
+            "name": {
+                "type": "string",
+                "description": "Skill name (without extension).",
+            },
+            "content": {
+                "type": "string",
+                "description": "Skill content (required for 'save').",
+            },
         },
         "required": ["action", "name"],
     },
 }
 
-
 # --- web_fetch ---
+
 
 def _web_fetch(url: str) -> str:
     """Fetch a URL and return text content."""
@@ -367,8 +426,8 @@ WEB_FETCH_SCHEMA = {
     },
 }
 
-
 # ── Bootstrap Toolset ──────────────────────────────────────────────────
+
 
 def bootstrap_tools() -> ToolRegistry:
     """Create a ToolRegistry with the 7 bootstrap tools."""

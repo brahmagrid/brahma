@@ -13,8 +13,8 @@ Examples:
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from dataclasses import dataclass, field
 
 import httpx
@@ -25,14 +25,19 @@ load_dotenv()
 
 # ── Response Types ─────────────────────────────────────────────────────
 
+
 @dataclass
 class Usage:
+    """Token usage counts for a single model response."""
+
     input_tokens: int = 0
     output_tokens: int = 0
 
 
 @dataclass
 class ModelResponse:
+    """Structured response from an LLM call — text, tool calls, and usage."""
+
     text: str = ""
     stop_reason: str = ""  # "end_turn" | "tool_use"
     tool_calls: list[dict] = field(default_factory=list)
@@ -44,12 +49,14 @@ class ModelResponse:
         if self.text:
             content.append({"type": "text", "text": self.text})
         for tc in self.tool_calls:
-            content.append({
-                "type": "tool_use",
-                "id": tc["id"],
-                "name": tc["name"],
-                "input": tc["input"],
-            })
+            content.append(
+                {
+                    "type": "tool_use",
+                    "id": tc["id"],
+                    "name": tc["name"],
+                    "input": tc["input"],
+                }
+            )
         return {"role": "assistant", "content": content}
 
 
@@ -85,6 +92,7 @@ PROVIDERS = {
 
 # ── Public API ─────────────────────────────────────────────────────────
 
+
 def call_model(
     model: str,
     messages: list[dict],
@@ -107,6 +115,7 @@ def call_model(
 
 
 # ── Provider Implementations ───────────────────────────────────────────
+
 
 def _call_anthropic(
     model_name: str,
@@ -212,6 +221,7 @@ def _call_openai_compatible(
 
 # ── Response Parsing ───────────────────────────────────────────────────
 
+
 def _parse_anthropic_response(data: dict) -> ModelResponse:
     text = ""
     tool_calls = []
@@ -221,11 +231,13 @@ def _parse_anthropic_response(data: dict) -> ModelResponse:
         if block["type"] == "text":
             text += block["text"]
         elif block["type"] == "tool_use":
-            tool_calls.append({
-                "id": block["id"],
-                "name": block["name"],
-                "input": block["input"],
-            })
+            tool_calls.append(
+                {
+                    "id": block["id"],
+                    "name": block["name"],
+                    "input": block["input"],
+                }
+            )
 
     if tool_calls and not text:
         stop_reason = "tool_use"
@@ -250,11 +262,13 @@ def _parse_openai_response(data: dict) -> ModelResponse:
 
     if message.get("tool_calls"):
         for tc in message["tool_calls"]:
-            tool_calls.append({
-                "id": tc["id"],
-                "name": tc["function"]["name"],
-                "input": json.loads(tc["function"]["arguments"]),
-            })
+            tool_calls.append(
+                {
+                    "id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "input": json.loads(tc["function"]["arguments"]),
+                }
+            )
 
     stop_reason = "tool_use" if tool_calls else "end_turn"
     if finish_reason == "stop" and not tool_calls:
@@ -269,6 +283,7 @@ def _parse_openai_response(data: dict) -> ModelResponse:
 
 
 # ── Message Normalization ──────────────────────────────────────────────
+
 
 def _normalize_messages_for_anthropic(messages: list[dict]) -> list[dict]:
     """Ensure messages are in Anthropic format."""
@@ -316,37 +331,44 @@ def _normalize_messages_for_openai(messages: list[dict]) -> list[dict]:
                 tool_results_parts.append(block)
 
         if tool_calls_parts and role == "assistant":
-            normalized.append({
-                "role": role,
-                "content": "\n".join(text_parts) if text_parts else None,
-                "tool_calls": [
-                    {
-                        "id": tc["id"],
-                        "type": "function",
-                        "function": {
-                            "name": tc["name"],
-                            "arguments": json.dumps(tc["input"]),
-                        },
-                    }
-                    for tc in tool_calls_parts
-                ],
-            })
+            normalized.append(
+                {
+                    "role": role,
+                    "content": "\n".join(text_parts) if text_parts else None,
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tc["name"],
+                                "arguments": json.dumps(tc["input"]),
+                            },
+                        }
+                        for tc in tool_calls_parts
+                    ],
+                }
+            )
         elif tool_results_parts and role == "user":
-            normalized.append({
-                "role": "tool",
-                "tool_call_id": tool_results_parts[0].get("tool_use_id", ""),
-                "content": tool_results_parts[0].get("content", ""),
-            })
+            normalized.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_results_parts[0].get("tool_use_id", ""),
+                    "content": tool_results_parts[0].get("content", ""),
+                }
+            )
         else:
-            normalized.append({
-                "role": role,
-                "content": "\n".join(text_parts) if text_parts else "",
-            })
+            normalized.append(
+                {
+                    "role": role,
+                    "content": "\n".join(text_parts) if text_parts else "",
+                }
+            )
 
     return normalized
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
+
 
 def _parse_model(model: str) -> tuple[str, str]:
     """Parse 'provider:model_name' into (provider, model_name)."""

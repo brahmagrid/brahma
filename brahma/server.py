@@ -14,30 +14,37 @@ Endpoints:
 
 from __future__ import annotations
 
+import logging
 import os
-import uuid
 import threading
-from dataclasses import dataclass, field
-from typing import Any
+import uuid
+from dataclasses import dataclass
+from datetime import UTC
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from brahma import Agent, bootstrap_tools, BOOTSTRAP_PROMPT
+from brahma.agent import Agent
+from brahma.bootstrap import BOOTSTRAP_PROMPT
+from brahma.tools import bootstrap_tools
 
+logger = logging.getLogger(__name__)
 
 # ── Data Models ────────────────────────────────────────────────────────
 
 
 class RunRequest(BaseModel):
+    """Request body for POST /run and POST /agent/{id}/run."""
+
     task: str
     model: str | None = None
     max_turns: int = 50
 
 
 class RunResponse(BaseModel):
+    """Response body for task execution results."""
+
     result: str
     turns: int
     tokens: dict[str, int]
@@ -45,20 +52,28 @@ class RunResponse(BaseModel):
 
 
 class SpawnRequest(BaseModel):
+    """Request body for POST /spawn."""
+
     tools: list[str] | None = None
     model: str | None = None
     system_prompt: str | None = None
 
 
 class SpawnResponse(BaseModel):
+    """Response body for agent creation."""
+
     agent_id: str
 
 
 class AgentsResponse(BaseModel):
+    """Response body for GET /agents."""
+
     agents: list[dict]
 
 
 class HealthResponse(BaseModel):
+    """Response body for GET /health."""
+
     status: str = "ok"
     active_agents: int
 
@@ -68,6 +83,8 @@ class HealthResponse(BaseModel):
 
 @dataclass
 class AgentEntry:
+    """Internal container tracking a registered agent and its metadata."""
+
     agent: Agent
     model: str
     tools: list[str]
@@ -77,7 +94,8 @@ class AgentEntry:
 class AgentRegistry:
     """Thread-safe registry of all agents in this process."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize an empty registry with a thread lock."""
         self._lock = threading.Lock()
         self._agents: dict[str, AgentEntry] = {}
 
@@ -87,6 +105,7 @@ class AgentRegistry:
         tools: list[str] | None = None,
         system_prompt: str | None = None,
     ) -> str:
+        """Register a new agent and return its ID."""
         agent_id = f"brahma-{uuid.uuid4().hex[:8]}"
         tool_names = tools or list(bootstrap_tools()._tools.keys())
 
@@ -111,13 +130,15 @@ class AgentRegistry:
         return agent_id
 
     def get(self, agent_id: str) -> AgentEntry:
+        """Retrieve an agent by ID. Raises HTTPException(404) if not found."""
         with self._lock:
             entry = self._agents.get(agent_id)
         if not entry:
             raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
         return entry
 
-    def list(self) -> list[dict]:
+    def list_agents(self) -> list[dict]:
+        """Return a summary of all registered agents."""
         with self._lock:
             return [
                 {
@@ -131,11 +152,13 @@ class AgentRegistry:
             ]
 
     def remove(self, agent_id: str) -> None:
+        """Remove an agent from the registry (no-op if not found)."""
         with self._lock:
             self._agents.pop(agent_id, None)
 
     @property
     def count(self) -> int:
+        """Number of currently registered agents."""
         with self._lock:
             return len(self._agents)
 
@@ -147,7 +170,11 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
     """
     Build the Brahma REST application.
 
-    default_model: The model used when no model is specified in requests.
+    Args:
+        default_model: The model used when no model is specified in requests.
+
+    Returns:
+        A configured FastAPI application instance.
     """
     app = FastAPI(
         title="Brahma — Bootstrap Agents",
@@ -165,11 +192,11 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
     def run_task(req: RunRequest) -> RunResponse:
         """
         Execute a task synchronously on the god agent.
+
         Blocks until the task completes or max_turns is reached.
         """
         entry = registry.get(god_id)
         agent = entry.agent
-        model = req.model or default_model
 
         if req.model:
             agent.model = req.model
@@ -187,6 +214,7 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
     def spawn_agent(req: SpawnRequest) -> SpawnResponse:
         """
         Create a child agent with optional tool subset and custom prompt.
+
         Returns the agent_id for subsequent /agent/{id}/run calls.
         """
         agent_id = registry.create(
@@ -198,9 +226,7 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
 
     @app.post("/agent/{agent_id}/run", response_model=RunResponse)
     def run_child_task(agent_id: str, req: RunRequest) -> RunResponse:
-        """
-        Execute a task on a specific child agent.
-        """
+        """Execute a task on a specific child agent."""
         entry = registry.get(agent_id)
         agent = entry.agent
 
@@ -217,9 +243,9 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
         )
 
     @app.get("/agents", response_model=AgentsResponse)
-    def list_agents() -> AgentsResponse:
+    def list_agents_endpoint() -> AgentsResponse:
         """List all agents (god + children)."""
-        return AgentsResponse(agents=registry.list())
+        return AgentsResponse(agents=registry.list_agents())
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -237,14 +263,16 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
 
 
 def _now() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    """Return the current UTC time as an ISO 8601 string."""
+    from datetime import datetime
+
+    return datetime.now(UTC).isoformat()
 
 
 # ── Entry Point ────────────────────────────────────────────────────────
 
 
-def main():
+def main() -> None:
     """Start the Brahma REST server."""
     model = os.getenv("BRAHMA_MODEL", "deepseek:deepseek-chat")
     host = os.getenv("BRAHMA_HOST", "0.0.0.0")
@@ -252,10 +280,10 @@ def main():
 
     app = create_app(default_model=model)
 
-    print(f"\n  Brahma — Bootstrap Agents")
-    print(f"  Model: {model}")
-    print(f"  Listening: http://{host}:{port}")
-    print(f"  Docs:     http://{host}:{port}/docs\n")
+    logger.info("Brahma — Bootstrap Agents")
+    logger.info("Model: %s", model)
+    logger.info("Listening: http://%s:%s", host, port)
+    logger.info("Docs:     http://%s:%s/docs", host, port)
 
     uvicorn.run(app, host=host, port=port, log_level="info")
 
