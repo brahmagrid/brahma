@@ -60,14 +60,13 @@ curl -X POST http://localhost:8420/agent/brahma-abc123/run \
 
 Once running, open http://localhost:8420/docs for the Swagger UI.
 
-## Supported Providers
+## Provider
 
 | Provider | Env Var | Model string |
 |----------|---------|-------------|
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek:deepseek-chat` |
-| Anthropic | `ANTHROPIC_API_KEY` | `anthropic:claude-sonnet-4-20250514` |
-| OpenAI | `OPENAI_API_KEY` | `openai:gpt-4o` |
-| OpenRouter | `OPENROUTER_API_KEY` | `openrouter:anthropic/claude-sonnet-4` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+
+The `deepseek:` prefix is accepted for backward compatibility.
 
 ## Environment Variables
 
@@ -85,7 +84,7 @@ brahma/
 │   ├── __init__.py      # Public API
 │   ├── agent.py         # Agent loop (~150 lines)
 │   ├── tools.py         # 8 bootstrap tools
-│   ├── models.py        # Provider routing
+│   ├── models.py        # DeepSeek API client
 │   ├── bootstrap.py     # System prompt
 │   ├── hitl.py           # HITL queue system
 │   └── server.py        # REST API server
@@ -98,7 +97,7 @@ brahma/
 
 - [x] Core agent loop
 - [x] 8 bootstrap tools
-- [x] Multi-provider (Anthropic, OpenAI, DeepSeek, OpenRouter)
+- [x] DeepSeek API integration
 - [x] JSON REST API (FastAPI + uvicorn)
 - [x] Agent spawning (/spawn + /agent/{id}/run)
 - [x] HITL client (Electron + Vite + React)

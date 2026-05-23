@@ -1,22 +1,19 @@
 """
-Tests for Brahma model routing and response types.
+Tests for Brahma model routing (DeepSeek-only).
 
-Covers Usage, ModelResponse, message normalization, and provider parsing.
+Covers Usage, ModelResponse, message normalization, response parsing,
+and provider prefix stripping.
 """
 
 from __future__ import annotations
 
-import pytest
-
 from brahma.models import (
-    PROVIDERS,
+    DEEPSEEK_MAX_OUTPUT_TOKENS,
     ModelResponse,
     Usage,
-    _normalize_messages_for_anthropic,
-    _normalize_messages_for_openai,
-    _parse_anthropic_response,
-    _parse_model,
-    _parse_openai_response,
+    _normalize_messages,
+    _parse_response,
+    _strip_provider_prefix,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -113,97 +110,42 @@ class TestModelResponse:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# _parse_model
+# _strip_provider_prefix
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestParseModel:
-    """Tests for the _parse_model helper."""
+class TestStripProviderPrefix:
+    """Tests for _strip_provider_prefix."""
 
-    def test_with_provider(self) -> None:
-        """Parses provider:model_name correctly."""
-        provider, model = _parse_model("anthropic:claude-sonnet-4-20250514")
-        assert provider == "anthropic"
-        assert model == "claude-sonnet-4-20250514"
+    def test_with_prefix(self) -> None:
+        """Strips the 'deepseek:' prefix."""
+        assert _strip_provider_prefix("deepseek:deepseek-chat") == "deepseek-chat"
 
-    def test_without_provider_defaults_to_deepseek(self) -> None:
-        """Without a provider prefix, defaults to deepseek."""
-        provider, model = _parse_model("deepseek-chat")
-        assert provider == "deepseek"
-        assert model == "deepseek-chat"
+    def test_without_prefix(self) -> None:
+        """Passes through when no prefix present."""
+        assert _strip_provider_prefix("deepseek-chat") == "deepseek-chat"
 
-    def test_unknown_provider_raises(self) -> None:
-        """Unknown provider raises ValueError."""
-        with pytest.raises(ValueError, match="Unknown provider"):
-            _parse_model("nonexistent:some-model")
+    def test_other_prefix_stripped(self) -> None:
+        """Any prefix before ':' is stripped (backward compat)."""
+        assert _strip_provider_prefix("anthropic:claude-4") == "claude-4"
 
-    def test_deepseek_provider(self) -> None:
-        """DeepSeek provider is recognized."""
-        provider, model = _parse_model("deepseek:deepseek-chat")
-        assert provider == "deepseek"
-        assert model == "deepseek-chat"
-
-    def test_openrouter_provider(self) -> None:
-        """OpenRouter provider is recognized."""
-        provider, model = _parse_model("openrouter:anthropic/claude-sonnet-4")
-        assert provider == "openrouter"
-        assert model == "anthropic/claude-sonnet-4"
-
-    def test_all_known_providers(self) -> None:
-        """All configured providers parse correctly."""
-        for provider_name in PROVIDERS:
-            result = _parse_model(f"{provider_name}:any-model")
-            assert result == (provider_name, "any-model")
+    def test_multiple_colons(self) -> None:
+        """Only the first colon is treated as a delimiter."""
+        assert _strip_provider_prefix("deepseek:deepseek-chat:v2") == "deepseek-chat:v2"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Message normalization — Anthropic
+# _normalize_messages
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestNormalizeMessagesForAnthropic:
-    """Tests for _normalize_messages_for_anthropic."""
-
-    def test_strips_system_messages(self) -> None:
-        """System messages are removed (Anthropic uses top-level system)."""
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello"},
-        ]
-        result = _normalize_messages_for_anthropic(messages)
-        assert len(result) == 1
-        assert result[0]["role"] == "user"
-
-    def test_converts_string_content_to_block(self) -> None:
-        """String content is wrapped in a text block."""
-        messages = [{"role": "user", "content": "plain text"}]
-        result = _normalize_messages_for_anthropic(messages)
-        assert result[0]["content"] == [{"type": "text", "text": "plain text"}]
-
-    def test_preserves_list_content(self) -> None:
-        """Already-list content is preserved."""
-        messages = [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "hello"}],
-            }
-        ]
-        result = _normalize_messages_for_anthropic(messages)
-        assert result[0]["content"] == [{"type": "text", "text": "hello"}]
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Message normalization — OpenAI
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class TestNormalizeMessagesForOpenai:
-    """Tests for _normalize_messages_for_openai."""
+class TestNormalizeMessages:
+    """Tests for _normalize_messages (DeepSeek / OpenAI-compatible format)."""
 
     def test_passes_through_string_content(self) -> None:
         """String content messages pass through unchanged."""
         messages = [{"role": "user", "content": "plain text"}]
-        result = _normalize_messages_for_openai(messages)
+        result = _normalize_messages(messages)
         assert result[0] == {"role": "user", "content": "plain text"}
 
     def test_text_block_extraction(self) -> None:
@@ -217,7 +159,7 @@ class TestNormalizeMessagesForOpenai:
                 ],
             }
         ]
-        result = _normalize_messages_for_openai(messages)
+        result = _normalize_messages(messages)
         assert result[0]["role"] == "user"
         assert result[0]["content"] == "part one\npart two"
 
@@ -236,7 +178,7 @@ class TestNormalizeMessagesForOpenai:
                 ],
             }
         ]
-        result = _normalize_messages_for_openai(messages)
+        result = _normalize_messages(messages)
         assert result[0]["role"] == "assistant"
         assert result[0]["content"] is None
         assert len(result[0]["tool_calls"]) == 1
@@ -256,67 +198,31 @@ class TestNormalizeMessagesForOpenai:
                 ],
             }
         ]
-        result = _normalize_messages_for_openai(messages)
+        result = _normalize_messages(messages)
         assert result[0]["role"] == "tool"
         assert result[0]["tool_call_id"] == "call_1"
         assert result[0]["content"] == "file contents here"
 
+    def test_system_message_passes_through(self) -> None:
+        """System role messages pass through (DeepSeek supports them)."""
+        messages = [{"role": "system", "content": "You are helpful."}]
+        result = _normalize_messages(messages)
+        assert result[0] == {"role": "system", "content": "You are helpful."}
+
+    def test_mixed_blocks_with_strings(self) -> None:
+        """Mixed list of dicts and strings is handled (joined with newlines)."""
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hello "}, "world"]}]
+        result = _normalize_messages(messages)
+        assert result[0]["content"] == "hello \nworld"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Response parsing
+# _parse_response
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestParseAnthropicResponse:
-    """Tests for _parse_anthropic_response."""
-
-    def test_text_only_response(self) -> None:
-        """Pure text response is parsed correctly."""
-        data = {
-            "stop_reason": "end_turn",
-            "content": [{"type": "text", "text": "Hello there"}],
-            "usage": {"input_tokens": 10, "output_tokens": 5},
-        }
-        result = _parse_anthropic_response(data)
-        assert result.text == "Hello there"
-        assert result.stop_reason == "end_turn"
-        assert result.tool_calls == []
-        assert result.usage.input_tokens == 10
-        assert result.usage.output_tokens == 5
-
-    def test_tool_use_response(self) -> None:
-        """Tool-use response is parsed with tool calls."""
-        data = {
-            "stop_reason": "tool_use",
-            "content": [
-                {
-                    "type": "tool_use",
-                    "id": "call_abc",
-                    "name": "read_file",
-                    "input": {"path": "/tmp/x"},
-                }
-            ],
-            "usage": {"input_tokens": 15, "output_tokens": 8},
-        }
-        result = _parse_anthropic_response(data)
-        assert result.text == ""
-        assert result.stop_reason == "tool_use"
-        assert len(result.tool_calls) == 1
-        assert result.tool_calls[0]["id"] == "call_abc"
-
-    def test_missing_usage_defaults(self) -> None:
-        """Missing usage data defaults to zero."""
-        data = {
-            "stop_reason": "end_turn",
-            "content": [{"type": "text", "text": "ok"}],
-        }
-        result = _parse_anthropic_response(data)
-        assert result.usage.input_tokens == 0
-        assert result.usage.output_tokens == 0
-
-
-class TestParseOpenAIResponse:
-    """Tests for _parse_openai_response."""
+class TestParseResponse:
+    """Tests for _parse_response (DeepSeek / OpenAI-compatible format)."""
 
     def test_text_only_response(self) -> None:
         """Pure text response is parsed correctly."""
@@ -329,7 +235,7 @@ class TestParseOpenAIResponse:
             ],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         }
-        result = _parse_openai_response(data)
+        result = _parse_response(data)
         assert result.text == "Hello"
         assert result.stop_reason == "end_turn"
         assert result.tool_calls == []
@@ -358,7 +264,7 @@ class TestParseOpenAIResponse:
             ],
             "usage": {"prompt_tokens": 20, "completion_tokens": 10},
         }
-        result = _parse_openai_response(data)
+        result = _parse_response(data)
         assert result.tool_calls[0]["name"] == "read_file"
         assert result.tool_calls[0]["input"] == {"path": "/tmp/x"}
         assert result.stop_reason == "tool_use"
@@ -373,5 +279,97 @@ class TestParseOpenAIResponse:
                 }
             ],
         }
-        result = _parse_openai_response(data)
+        result = _parse_response(data)
         assert result.text == ""
+
+    def test_missing_usage_defaults_zero(self) -> None:
+        """Missing usage data defaults to zero."""
+        data = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": "ok"},
+                }
+            ],
+        }
+        result = _parse_response(data)
+        assert result.usage.input_tokens == 0
+        assert result.usage.output_tokens == 0
+
+    def test_multiple_tool_calls(self) -> None:
+        """Multiple tool calls in one response are all parsed."""
+        data = {
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "c1",
+                                "type": "function",
+                                "function": {"name": "read_file", "arguments": '{"path": "/a"}'},
+                            },
+                            {
+                                "id": "c2",
+                                "type": "function",
+                                "function": {
+                                    "name": "write_file",
+                                    "arguments": '{"path": "/b", "content": "x"}',
+                                },
+                            },
+                        ],
+                    },
+                }
+            ],
+        }
+        result = _parse_response(data)
+        assert len(result.tool_calls) == 2
+        assert result.tool_calls[0]["name"] == "read_file"
+        assert result.tool_calls[1]["name"] == "write_file"
+
+    def test_text_with_tool_calls(self) -> None:
+        """Response with both text and tool calls."""
+        data = {
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": "Let me check that first.",
+                        "tool_calls": [
+                            {
+                                "id": "c1",
+                                "type": "function",
+                                "function": {
+                                    "name": "search_files",
+                                    "arguments": '{"pattern": "TODO"}',
+                                },
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+        result = _parse_response(data)
+        assert result.text == "Let me check that first."
+        assert len(result.tool_calls) == 1
+        assert result.stop_reason == "tool_use"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DEEPSEEK_MAX_OUTPUT_TOKENS
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMaxOutputTokens:
+    """Tests for the DeepSeek output token constant."""
+
+    def test_max_tokens_is_8192(self) -> None:
+        """Default max_tokens is set to DeepSeek V3's actual limit."""
+        assert DEEPSEEK_MAX_OUTPUT_TOKENS == 8192
+
+    def test_exceeds_default_4096(self) -> None:
+        """Our setting exceeds DeepSeek's default of 4096."""
+        assert DEEPSEEK_MAX_OUTPUT_TOKENS > 4096

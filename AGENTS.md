@@ -27,7 +27,7 @@ brahma/                         ← YOU ARE HERE (cwd)
 │   ├── __init__.py             # Public API: Agent, bootstrap_tools, create_app, BOOTSTRAP_PROMPT
 │   ├── agent.py                # Core agent loop (~150 lines)
 │   ├── tools.py                # 8 bootstrap tools (read_file, write_file, search_files, terminal, delegate_task, skill_manage, web_fetch, hitl_request)
-│   ├── models.py               # Provider routing (Anthropic, OpenAI, DeepSeek, OpenRouter)
+│   ├── models.py               # DeepSeek API client
 │   ├── bootstrap.py            # BOOTSTRAP_PROMPT — the meta-capability system prompt
 │   ├── hitl.py                 # HITL queue system
 │   └── server.py               # FastAPI REST server (10 endpoints, port 8420)
@@ -83,8 +83,7 @@ curl http://localhost:8420/agents
 
 - **Python:** 3.14+ via uv (not pip)
 - **OS:** Linux
-- **API keys:** Set in `.env` (copy from .env.example)
-- **Provider format:** `provider:model_name` (e.g., `deepseek:deepseek-chat`, `anthropic:claude-sonnet-4-20250514`)
+- **Provider:** DeepSeek (set `DEEPSEEK_API_KEY` in `.env`). Model string: `deepseek-chat`.
 
 ## Type Discipline (NON-NEGOTIABLE)
 
