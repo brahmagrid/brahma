@@ -29,9 +29,7 @@ class TestWebFetch:
             result = _web_fetch("https://example.com")
 
         assert "Hello World" in result
-        mock_get.assert_called_once_with(
-            "https://example.com", follow_redirects=True, timeout=30
-        )
+        mock_get.assert_called_once_with("https://example.com", follow_redirects=True, timeout=30)
 
     def test_http_error_returns_error_message(self) -> None:
         """HTTP errors are caught and returned as error strings."""

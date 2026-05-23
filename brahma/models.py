@@ -164,9 +164,7 @@ def _parse_response(data: dict) -> ModelResponse:
         output_tokens=data.get("usage", {}).get("completion_tokens", 0),
     )
 
-    return ModelResponse(
-        text=text, stop_reason=stop_reason, tool_calls=tool_calls, usage=usage
-    )
+    return ModelResponse(text=text, stop_reason=stop_reason, tool_calls=tool_calls, usage=usage)
 
 
 # ── Message Normalization ──────────────────────────────────────────────
