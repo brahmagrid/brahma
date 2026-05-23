@@ -70,8 +70,8 @@ class TestDelegateTask:
         assert "read_file" in child_tools
         assert "nonexistent_tool" not in child_tools
 
-    def test_default_model_is_deepseek(self) -> None:
-        """When no model specified, defaults to deepseek:deepseek-chat."""
+    def test_default_model_is_deepseek_v4_pro(self) -> None:
+        """When no model specified, defaults to deepseek-v4-pro."""
         with patch("brahma.agent.Agent", autospec=True) as mock_agent_cls:
             mock_agent = mock_agent_cls.return_value
             mock_agent.run.return_value = "ok"
@@ -79,7 +79,7 @@ class TestDelegateTask:
             _delegate_task(goal="Test")
 
         call_kwargs = mock_agent_cls.call_args.kwargs
-        assert call_kwargs["model"] == "deepseek:deepseek-chat"
+        assert call_kwargs["model"] == "deepseek-v4-pro"
 
     def test_custom_model_is_passed(self) -> None:
         """Custom model string is passed to the child agent."""

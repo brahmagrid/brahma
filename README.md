@@ -64,7 +64,7 @@ Once running, open http://localhost:8420/docs for the Swagger UI.
 
 | Provider | Env Var | Model string |
 |----------|---------|-------------|
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-v4-pro` |
 
 The `deepseek:` prefix is accepted for backward compatibility.
 

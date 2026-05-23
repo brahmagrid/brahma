@@ -18,10 +18,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# DeepSeek's actual max output tokens is 8192 for deepseek-chat (V3).
-# We use this instead of the default 4096 to support code generation
-# in the bootstrap GENERATE step.
-DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
+# DeepSeek V4-Pro supports up to 65,536 output tokens.
+# We set 32,768 as a safe default — high enough for code generation
+# in the bootstrap GENERATE step, leaving headroom for tool calls.
+DEEPSEEK_MAX_OUTPUT_TOKENS = 32768
 
 # ── Response Types ─────────────────────────────────────────────────────
 

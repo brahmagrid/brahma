@@ -289,7 +289,7 @@ def _delegate_task(
         goal: What the child agent should accomplish.
         context: Background information for the child agent.
         tools: Tool names to give the child. Defaults to all bootstrap tools.
-        model: Provider:model_name for the child. Defaults to deepseek:deepseek-chat.
+        model: Provider:model_name for the child. Defaults to deepseek-v4-pro.
     """
     # Avoid circular import
     from brahma.agent import Agent
@@ -312,7 +312,7 @@ def _delegate_task(
 
     child = Agent(
         system_prompt=BOOTSTRAP_PROMPT,
-        model=model or "deepseek:deepseek-chat",
+        model=model or "deepseek-v4-pro",
         tools=child_tools,
         max_turns=30,
     )

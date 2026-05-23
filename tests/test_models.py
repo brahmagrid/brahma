@@ -366,10 +366,10 @@ class TestParseResponse:
 class TestMaxOutputTokens:
     """Tests for the DeepSeek output token constant."""
 
-    def test_max_tokens_is_8192(self) -> None:
-        """Default max_tokens is set to DeepSeek V3's actual limit."""
-        assert DEEPSEEK_MAX_OUTPUT_TOKENS == 8192
+    def test_max_tokens_is_32768(self) -> None:
+        """Default max_tokens is set to 32,768 for V4-Pro headroom."""
+        assert DEEPSEEK_MAX_OUTPUT_TOKENS == 32768
 
     def test_exceeds_default_4096(self) -> None:
-        """Our setting exceeds DeepSeek's default of 4096."""
+        """Our setting far exceeds DeepSeek's default of 4096."""
         assert DEEPSEEK_MAX_OUTPUT_TOKENS > 4096

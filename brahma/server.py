@@ -183,7 +183,7 @@ class AgentRegistry:
 # ── App Factory ────────────────────────────────────────────────────────
 
 
-def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
+def create_app(default_model: str = "deepseek-v4-pro") -> FastAPI:
     """
     Build the Brahma REST application.
 
@@ -349,7 +349,7 @@ def _now() -> str:
 
 def main() -> None:
     """Start the Brahma REST server."""
-    model = os.getenv("BRAHMA_MODEL", "deepseek:deepseek-chat")
+    model = os.getenv("BRAHMA_MODEL", "deepseek-v4-pro")
     host = os.getenv("BRAHMA_HOST", "0.0.0.0")
     port = int(os.getenv("BRAHMA_PORT", "8420"))
 
