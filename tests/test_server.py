@@ -10,7 +10,7 @@ from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from brahma.server import (
@@ -319,8 +319,6 @@ class TestAgentRegistry:
         self, registry: AgentRegistry
     ) -> None:
         """get() on nonexistent ID raises HTTP 404."""
-        from fastapi import HTTPException
-
         with pytest.raises(HTTPException) as exc_info:
             registry.get("nonexistent-id")
         assert exc_info.value.status_code == 404
