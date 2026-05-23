@@ -3,7 +3,7 @@ name = "brahma"
 version = "0.1.0"
 description = "Bootstrap Agents: Recursive Self-Organization for Long-Horizon Autonomous Task Execution"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
@@ -39,7 +39,7 @@ dev = [
 # ═══════════════════════════════════════════════════════════════════════════
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
@@ -80,4 +80,4 @@ docstring-code-format = true
 # ═══════════════════════════════════════════════════════════════════════════
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.14"
