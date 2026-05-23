@@ -80,7 +80,7 @@ curl http://localhost:8420/agents
 
 ## Environment
 
-- **Python:** 3.12+ via uv (not pip)
+- **Python:** 3.14+ via uv (not pip)
 - **OS:** Linux
 - **API keys:** Set in `.env` (copy from .env.example)
 - **Provider format:** `provider:model_name` (e.g., `deepseek:deepseek-chat`, `anthropic:claude-sonnet-4-20250514`)
@@ -94,6 +94,18 @@ curl http://localhost:8420/agents
 3. **When a function signature changes, update the docstring immediately** — stale
    docs are worse than no docs.
 4. This applies to ALL code in this repo: `brahma/`, `tests/`, scripts, everything.
+
+## Import Rules
+
+1. **All imports go at the top of the module** — no exceptions for stdlib or
+   always-available packages. `import datetime` at the top, not inside a function.
+2. **Deferred (in-function) imports are allowed only when:**
+   - **Circular import avoidance** — when two modules would otherwise import each
+     other at module level (see `_delegate_task` in tools.py).
+   - **Heavy/optional dependencies** — third-party packages that are expensive to
+     load and may not be used in every session (see `import httpx` in `_web_fetch`).
+   - **Conditional/platform imports** — `if sys.platform == "win32": ...`
+3. If you add a deferred import, add a comment explaining *why* it's deferred.
 
 ## Agent Rules
 

@@ -19,7 +19,7 @@ import os
 import threading
 import uuid
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, datetime
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -264,8 +264,6 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
 
 def _now() -> str:
     """Return the current UTC time as an ISO 8601 string."""
-    from datetime import datetime
-
     return datetime.now(UTC).isoformat()
 
 
