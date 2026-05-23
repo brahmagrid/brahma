@@ -27,7 +27,8 @@ from pydantic import BaseModel
 
 from brahma.agent import Agent
 from brahma.bootstrap import BOOTSTRAP_PROMPT
-from brahma.tools import bootstrap_tools
+from brahma.hitl import HITLQueue
+from brahma.tools import bootstrap_tools, set_hitl_queue
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,22 @@ class HealthResponse(BaseModel):
 
     status: str = "ok"
     active_agents: int
+
+
+class HITLCreateRequest(BaseModel):
+    """Request body for POST /hitl/request."""
+
+    agent_id: str = "brahma-agent"
+    task_summary: str = ""
+    prompt: str
+    request_type: str = "approval"
+    choices: list[str] | None = None
+
+
+class HITLRespondRequest(BaseModel):
+    """Request body for POST /hitl/{id}/respond."""
+
+    response: str
 
 
 # ── Agent Registry ─────────────────────────────────────────────────────
@@ -182,6 +199,8 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
         description="JSON-over-HTTP API for self-extending agent runtime.",
     )
     registry = AgentRegistry()
+    hitl_queue = HITLQueue()
+    set_hitl_queue(hitl_queue)  # Wire into tools module for hitl_request tool
 
     # ── Root agent (god agent) ──────────────────────────────────────
     god_id = registry.create(model=default_model)
@@ -252,8 +271,66 @@ def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
         """Health check."""
         return HealthResponse(active_agents=registry.count)
 
+    # ── HITL Endpoints ──────────────────────────────────────────────
+
+    @app.post("/hitl/request")
+    def create_hitl_request(req: HITLCreateRequest) -> dict:
+        """
+        Create a HITL request. Used by agents when they need human input.
+
+        Returns the request_id for polling.
+        """
+        request_id = hitl_queue.create(
+            agent_id=req.agent_id,
+            task_summary=req.task_summary,
+            prompt=req.prompt,
+            request_type=req.request_type,
+            choices=req.choices,
+        )
+        return {"request_id": request_id, "status": "pending"}
+
+    @app.get("/hitl/pending")
+    def list_pending_hitl() -> dict:
+        """List all pending HITL requests (for the client to poll)."""
+        return {"requests": hitl_queue.list_pending()}
+
+    @app.get("/hitl/{request_id}")
+    def get_hitl_request(request_id: str) -> dict:
+        """Get details of a specific HITL request."""
+        req = hitl_queue.get(request_id)
+        if not req:
+            raise HTTPException(status_code=404, detail=f"HITL request '{request_id}' not found")
+        return req.to_dict()
+
+    @app.post("/hitl/{request_id}/respond")
+    def respond_hitl(request_id: str, req: HITLRespondRequest) -> dict:
+        """
+        Respond to a HITL request.
+
+        Called by the client when a human submits their response.
+        """
+        ok = hitl_queue.respond(request_id, req.response)
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail=f"HITL request '{request_id}' not found or already resolved.",
+            )
+        return {"status": "resolved", "request_id": request_id}
+
+    @app.post("/hitl/{request_id}/cancel")
+    def cancel_hitl(request_id: str) -> dict:
+        """Cancel a pending HITL request."""
+        ok = hitl_queue.cancel(request_id)
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail=f"HITL request '{request_id}' not found or already resolved.",
+            )
+        return {"status": "cancelled", "request_id": request_id}
+
     # Store registry reference for testing
     app.state.registry = registry
+    app.state.hitl_queue = hitl_queue
     app.state.god_id = god_id
 
     return app

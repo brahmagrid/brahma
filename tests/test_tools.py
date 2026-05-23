@@ -388,10 +388,10 @@ class TestSkillManage:
 class TestBootstrapTools:
     """Tests for the bootstrap_tools() factory function."""
 
-    def test_returns_registry_with_7_tools(self) -> None:
-        """The factory returns a registry with all 7 bootstrap tools."""
+    def test_returns_registry_with_8_tools(self) -> None:
+        """The factory returns a registry with all 8 bootstrap tools."""
         registry = bootstrap_tools()
-        assert len(registry) == 7
+        assert len(registry) == 8
 
     def test_all_expected_tools_present(self) -> None:
         """All expected tool names are registered."""
@@ -404,6 +404,7 @@ class TestBootstrapTools:
             "delegate_task",
             "skill_manage",
             "web_fetch",
+            "hitl_request",
         }
         assert set(registry.list_tools()) == expected
 
@@ -419,7 +420,7 @@ class TestBootstrapTools:
         """Each tool schema has required fields."""
         registry = bootstrap_tools()
         schemas = registry.schemas()
-        assert len(schemas) == 7
+        assert len(schemas) == 8
         for schema in schemas:
             assert "name" in schema
             assert "description" in schema
