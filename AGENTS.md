@@ -6,11 +6,11 @@
 
 ## What This Is
 
-Brahma is a recursive, self-organizing agent runtime. It starts with 7 bootstrap tools
+Brahma is a recursive, self-organizing agent runtime. It starts with 8 bootstrap tools
 and generates all other capabilities at runtime through a generate-validate-use-save loop.
 
 Traditional agentic tools (Claude Code, Hermes, OpenCode) pre-load 40+ tools at startup.
-Brahma loads 7 and JIT-generates everything else.
+Brahma loads 8 and JIT-generates everything else.
 
 ## Project Structure
 
@@ -26,10 +26,11 @@ brahma/                         ← YOU ARE HERE (cwd)
 ├── brahma/                     ← Python package
 │   ├── __init__.py             # Public API: Agent, bootstrap_tools, create_app, BOOTSTRAP_PROMPT
 │   ├── agent.py                # Core agent loop (~150 lines)
-│   ├── tools.py                # 7 bootstrap tools (read_file, write_file, search_files, terminal, delegate_task, skill_manage, web_fetch)
+│   ├── tools.py                # 8 bootstrap tools (read_file, write_file, search_files, terminal, delegate_task, skill_manage, web_fetch, hitl_request)
 │   ├── models.py               # Provider routing (Anthropic, OpenAI, DeepSeek, OpenRouter)
 │   ├── bootstrap.py            # BOOTSTRAP_PROMPT — the meta-capability system prompt
-│   └── server.py               # FastAPI REST server (5 endpoints, port 8420)
+│   ├── hitl.py                 # HITL queue system
+│   └── server.py               # FastAPI REST server (10 endpoints, port 8420)
 │
 ├── tests/
 │   └── __init__.py

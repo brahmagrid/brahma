@@ -273,26 +273,46 @@ TERMINAL_SCHEMA = {
 # --- delegate_task ---
 
 
-def _delegate_task(goal: str, context: str = "", tools: list[str] | None = None) -> str:
+def _delegate_task(
+    goal: str,
+    context: str = "",
+    tools: list[str] | None = None,
+    model: str = "",
+) -> str:
     """
     Spawn a child agent to work on a task independently.
 
     This is the spawn meta-capability. In MVP, it creates a new Agent instance
     with a subset of tools and runs it in-process. Future: subprocess/K8s Job.
+
+    Args:
+        goal: What the child agent should accomplish.
+        context: Background information for the child agent.
+        tools: Tool names to give the child. Defaults to all bootstrap tools.
+        model: Provider:model_name for the child. Defaults to deepseek:deepseek-chat.
     """
     # Avoid circular import
     from brahma.agent import Agent
     from brahma.bootstrap import BOOTSTRAP_PROMPT
 
-    # Build child's toolset
+    # Build child's toolset from bootstrap tools, filtered by request
+    full_tools = bootstrap_tools()
     child_tools = ToolRegistry()
-    for _tool_name in tools or ["read_file", "write_file", "search_files", "terminal"]:
-        # Inherit tool from parent if available
-        pass  # Child gets its own minimal toolset — see spawn() below
+    requested = tools if tools is not None else full_tools.list_tools()
+
+    for tool_name in requested:
+        fn = full_tools.get(tool_name)
+        if fn is not None:
+            # Find the schema from the full registry
+            for _, (reg_fn, schema) in full_tools._tools.items():
+                if reg_fn is fn:
+                    child_tools.register(tool_name, fn, schema)
+                    break
+        # Unknown tool names are silently skipped
 
     child = Agent(
         system_prompt=BOOTSTRAP_PROMPT,
-        model="deepseek:deepseek-chat",  # Default cheap model for children
+        model=model or "deepseek:deepseek-chat",
         tools=child_tools,
         max_turns=30,
     )
@@ -305,7 +325,10 @@ def _delegate_task(goal: str, context: str = "", tools: list[str] | None = None)
 
 
 DELEGATE_TASK_SCHEMA = {
-    "description": ("Spawn a child Brahma agent to work on a subtask independently."),
+    "description": (
+        "Spawn a child Brahma agent to work on a subtask independently."
+        " The child gets bootstrap tools and runs with its own context."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
@@ -320,7 +343,17 @@ DELEGATE_TASK_SCHEMA = {
             "tools": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Tool names to give the child agent.",
+                "description": (
+                    "Tool names to give the child agent."
+                    " Defaults to all bootstrap tools if omitted."
+                ),
+            },
+            "model": {
+                "type": "string",
+                "description": (
+                    "Provider:model_name for the child."
+                    " Defaults to deepseek:deepseek-chat if omitted."
+                ),
             },
         },
         "required": ["goal"],

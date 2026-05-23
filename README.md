@@ -5,7 +5,7 @@
 > Domain: brahmagrid.io
 
 Brahma is a minimal, self-extending agent runtime with a JSON-over-HTTP interface.
-It starts with 7 bootstrap tools and generates all other capabilities at runtime.
+It starts with 8 bootstrap tools and generates all other capabilities at runtime.
 
 ## Architecture
 
@@ -84,9 +84,10 @@ brahma/
 ├── brahma/
 │   ├── __init__.py      # Public API
 │   ├── agent.py         # Agent loop (~150 lines)
-│   ├── tools.py         # 7 bootstrap tools
+│   ├── tools.py         # 8 bootstrap tools
 │   ├── models.py        # Provider routing
 │   ├── bootstrap.py     # System prompt
+│   ├── hitl.py           # HITL queue system
 │   └── server.py        # REST API server
 ├── tests/
 ├── pyproject.toml
@@ -96,14 +97,14 @@ brahma/
 ## MVP Status
 
 - [x] Core agent loop
-- [x] 7 bootstrap tools
+- [x] 8 bootstrap tools
 - [x] Multi-provider (Anthropic, OpenAI, DeepSeek, OpenRouter)
 - [x] JSON REST API (FastAPI + uvicorn)
 - [x] Agent spawning (/spawn + /agent/{id}/run)
+- [x] HITL client (Electron + Vite + React)
 - [ ] Adversarial cross-model validation
 - [ ] Context budget monitoring
 - [ ] Auto-splitting on context threshold
 - [ ] Tiered memory (hot/warm/cool/cold)
 - [ ] Layered OverlayFS isolation
 - [ ] Recursive cost governance
-- [ ] HITL client
