@@ -44,9 +44,7 @@ class TestToolResult:
 
     def test_failure_result(self) -> None:
         """Failure result stores error message."""
-        result = ToolResult(
-            tool="fail", success=False, output="", error="something broke"
-        )
+        result = ToolResult(tool="fail", success=False, output="", error="something broke")
         assert result.success is False
         assert result.error == "something broke"
 
@@ -119,25 +117,19 @@ class TestToolRegistry:
         assert result.success is True
         assert result.output == "Hello, World"
 
-    def test_execute_unknown_tool(
-        self, populated_registry: ToolRegistry
-    ) -> None:
+    def test_execute_unknown_tool(self, populated_registry: ToolRegistry) -> None:
         """Executing an unknown tool returns a failure result."""
         result = populated_registry.execute("no_such_tool", {})
         assert result.success is False
         assert "Unknown tool" in result.error
 
-    def test_execute_tool_raises(
-        self, populated_registry: ToolRegistry
-    ) -> None:
+    def test_execute_tool_raises(self, populated_registry: ToolRegistry) -> None:
         """Tool exceptions are caught and returned as failures."""
 
         def blow_up() -> str:
             raise ValueError("kapow")
 
-        populated_registry.register(
-            "fragile", blow_up, {"description": "Will fail"}
-        )
+        populated_registry.register("fragile", blow_up, {"description": "Will fail"})
         result = populated_registry.execute("fragile", {})
         assert result.success is False
         assert "kapow" in result.error
@@ -201,11 +193,7 @@ class TestReadFile:
         try:
             output = _read_file(path, limit=5)
             lines = output.splitlines()
-            assert any(
-                f"{i + 1:6d}" in line
-                for i, line in enumerate(lines)
-                if "|" in line
-            )
+            assert any(f"{i + 1:6d}" in line for i, line in enumerate(lines) if "|" in line)
             assert "... (15 more lines)" in output
         finally:
             Path(path).unlink()
@@ -343,9 +331,7 @@ class TestSkillManage:
     @pytest.fixture(autouse=True)
     def setup_teardown(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Redirect SKILLS_DIR to a temp directory for isolation."""
-        monkeypatch.setattr(
-            "brahma.tools.SKILLS_DIR", tmp_path / ".brahma" / "skills"
-        )
+        monkeypatch.setattr("brahma.tools.SKILLS_DIR", tmp_path / ".brahma" / "skills")
         self.skills_dir = tmp_path / ".brahma" / "skills"
 
     def test_save_and_load(self) -> None:

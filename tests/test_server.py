@@ -226,9 +226,7 @@ class TestAgentsEndpoint:
         assert "agents" in data
         assert len(data["agents"]) >= 1
 
-    def test_includes_child_agents_after_spawn(
-        self, client: TestClient
-    ) -> None:
+    def test_includes_child_agents_after_spawn(self, client: TestClient) -> None:
         """Spawned agents appear in the list."""
         client.post("/spawn", json={})
         response = client.get("/agents")
@@ -315,17 +313,13 @@ class TestAgentRegistry:
         assert entry.agent is not None
         assert isinstance(entry.tools, list)
 
-    def test_get_nonexistent_raises_404(
-        self, registry: AgentRegistry
-    ) -> None:
+    def test_get_nonexistent_raises_404(self, registry: AgentRegistry) -> None:
         """get() on nonexistent ID raises HTTP 404."""
         with pytest.raises(HTTPException) as exc_info:
             registry.get("nonexistent-id")
         assert exc_info.value.status_code == 404
 
-    def test_list_agents_returns_summaries(
-        self, registry: AgentRegistry
-    ) -> None:
+    def test_list_agents_returns_summaries(self, registry: AgentRegistry) -> None:
         """list_agents() returns dict summaries."""
         registry.create(model="a")
         registry.create(model="b")
@@ -343,9 +337,7 @@ class TestAgentRegistry:
         registry.remove(agent_id)
         assert registry.count == 0
 
-    def test_remove_nonexistent_noop(
-        self, registry: AgentRegistry
-    ) -> None:
+    def test_remove_nonexistent_noop(self, registry: AgentRegistry) -> None:
         """remove() on nonexistent ID is a no-op."""
         registry.remove("no-such-id")
         # Should not raise

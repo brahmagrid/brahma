@@ -96,9 +96,7 @@ class TestModelResponse:
         mr = ModelResponse(
             text="",
             stop_reason="tool_use",
-            tool_calls=[
-                {"id": "call_1", "name": "terminal", "input": {"command": "ls"}}
-            ],
+            tool_calls=[{"id": "call_1", "name": "terminal", "input": {"command": "ls"}}],
             usage=Usage(input_tokens=5, output_tokens=3),
         )
         msg = mr.to_assistant_message()
@@ -147,9 +145,7 @@ class TestParseModel:
 
     def test_openrouter_provider(self) -> None:
         """OpenRouter provider is recognized."""
-        provider, model = _parse_model(
-            "openrouter:anthropic/claude-sonnet-4"
-        )
+        provider, model = _parse_model("openrouter:anthropic/claude-sonnet-4")
         assert provider == "openrouter"
         assert model == "anthropic/claude-sonnet-4"
 

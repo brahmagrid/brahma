@@ -142,8 +142,7 @@ def _serialize_content(content: object) -> str:
         return content
     if isinstance(content, list):
         return "".join(
-            _extract_text(block) if isinstance(block, dict) else str(block)
-            for block in content
+            _extract_text(block) if isinstance(block, dict) else str(block) for block in content
         )
     return str(content)
 

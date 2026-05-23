@@ -81,9 +81,7 @@ class TestToolResultsMessage:
 
     def test_single_success_result(self) -> None:
         """Builds correct message for one successful result."""
-        result = ToolResult(
-            tool="read_file", success=True, output="file contents", call_id="c1"
-        )
+        result = ToolResult(tool="read_file", success=True, output="file contents", call_id="c1")
         msg = _tool_results_message([result])
         assert msg["role"] == "user"
         assert len(msg["content"]) == 1
@@ -92,9 +90,7 @@ class TestToolResultsMessage:
 
     def test_single_failure_result(self) -> None:
         """Builds correct message for a failed result."""
-        result = ToolResult(
-            tool="broken", success=False, output="", error="boom", call_id="c2"
-        )
+        result = ToolResult(tool="broken", success=False, output="", error="boom", call_id="c2")
         msg = _tool_results_message([result])
         assert "ERROR" in msg["content"][0]["content"]
 
@@ -215,9 +211,7 @@ class TestExecuteTools:
 
     def test_unknown_tool_returns_error(self, agent: Agent) -> None:
         """Unknown tool call returns a failure result."""
-        results = agent._execute_tools(
-            [{"name": "no_such_tool", "input": {}, "id": "c2"}]
-        )
+        results = agent._execute_tools([{"name": "no_such_tool", "input": {}, "id": "c2"}])
         assert results[0].success is False
         assert "Unknown tool" in results[0].error
 
@@ -304,9 +298,7 @@ class TestAgentRun:
         tool_resp = ModelResponse(
             text="",
             stop_reason="tool_use",
-            tool_calls=[
-                {"name": "double", "input": {"n": 21}, "id": "c1"}
-            ],
+            tool_calls=[{"name": "double", "input": {"n": 21}, "id": "c1"}],
             usage=Usage(input_tokens=5, output_tokens=3),
         )
         text_resp = ModelResponse(
@@ -314,9 +306,7 @@ class TestAgentRun:
             stop_reason="end_turn",
             usage=Usage(input_tokens=10, output_tokens=5),
         )
-        with patch(
-            "brahma.agent.call_model", side_effect=[tool_resp, text_resp]
-        ):
+        with patch("brahma.agent.call_model", side_effect=[tool_resp, text_resp]):
             result = agent.run("Double 21")
         assert result == "The answer is 42."
         assert agent.turn_count == 2
@@ -327,14 +317,10 @@ class TestAgentRun:
         tool_resp = ModelResponse(
             text="",
             stop_reason="tool_use",
-            tool_calls=[
-                {"name": "double", "input": {"n": 1}, "id": "c1"}
-            ],
+            tool_calls=[{"name": "double", "input": {"n": 1}, "id": "c1"}],
             usage=Usage(input_tokens=1, output_tokens=1),
         )
-        with patch(
-            "brahma.agent.call_model", return_value=tool_resp
-        ):
+        with patch("brahma.agent.call_model", return_value=tool_resp):
             result = agent.run("Loop forever")
         assert "Max turns reached" in result
 
