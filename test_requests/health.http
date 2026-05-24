@@ -1,0 +1,9 @@
+# Brahma — Health
+# Requires: humao.rest-client
+
+@brahma_host = localhost
+@brahma_port = 8420
+@base_url = http://{{brahma_host}}:{{brahma_port}}
+
+### Health Check
+GET {{base_url}}/health

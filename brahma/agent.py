@@ -9,10 +9,13 @@ Architecture: Think → Act → Observe → Repeat
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from brahma.models import ModelResponse, call_model
 from brahma.tools import ToolRegistry, ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -49,8 +52,13 @@ class Agent:
         self._turn_count = 0
         self._token_usage = {"input": 0, "output": 0, "total": 0}
 
+        logger.info("=== Brahma run started ===")
+        logger.info("Task: %s", _truncate(task, 200))
+
         while self._turn_count < self.max_turns:
             self._turn_count += 1
+
+            logger.debug("─ Turn %d ─ calling %s", self._turn_count, self.model)
 
             response = call_model(
                 model=self.model,
@@ -60,18 +68,44 @@ class Agent:
 
             self._accumulate_tokens(response)
 
+            logger.debug(
+                "─ Turn %d ─ stop_reason=%s text=%s tool_calls=%d "
+                "tokens(in=%d out=%d total=%d)",
+                self._turn_count,
+                response.stop_reason,
+                _truncate(response.text, 80),
+                len(response.tool_calls),
+                response.usage.input_tokens,
+                response.usage.output_tokens,
+                self._token_usage["total"],
+            )
+
             if response.stop_reason == "end_turn":
+                logger.info("=== Run complete — %d turns, %d total tokens ===",
+                            self._turn_count, self._token_usage["total"])
                 return response.text
 
             if response.stop_reason == "tool_use":
                 self._messages.append(response.to_assistant_message())
                 tool_results = self._execute_tools(response.tool_calls)
                 self._messages.append(_tool_results_message(tool_results))
+
+                for tc, tr in zip(response.tool_calls, tool_results, strict=True):
+                    status = "✓" if tr.success else "✗"
+                    logger.debug(
+                        "─ Turn %d ─ tool %s %s(%s) → %s",
+                        self._turn_count,
+                        status,
+                        tc.get("name", "?"),
+                        _truncate(_summarize_input(tc.get("input", {})), 60),
+                        _truncate(tr.output or tr.error, 120),
+                    )
                 continue
 
             # Should not reach here — unknown stop reason
             raise RuntimeError(f"Unknown stop_reason: {response.stop_reason}")
 
+        logger.warning("=== Max turns (%d) reached ===", self.max_turns)
         return "⚠️ Max turns reached without completion."
 
     # ── Internal ────────────────────────────────────────────────────
@@ -150,3 +184,23 @@ def _serialize_content(content: object) -> str:
 def _extract_text(block: dict) -> str:
     """Extract the text field from a content block dict."""
     return block.get("text", "")
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    """Truncate text to max_chars, appending '…' if truncated."""
+    text = text.replace("\n", "\\n")
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1] + "…"
+
+
+def _summarize_input(input_dict: dict) -> str:
+    """Summarize a tool input dict for logging — key:value pairs."""
+    if not input_dict:
+        return ""
+    parts = []
+    for k, v in input_dict.items():
+        if isinstance(v, str) and len(v) > 40:
+            v = v[:37] + "..."
+        parts.append(f"{k}={v}")
+    return ", ".join(parts)

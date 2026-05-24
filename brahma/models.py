@@ -10,6 +10,7 @@ The "deepseek:" prefix is accepted but optional.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -17,6 +18,8 @@ import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # DeepSeek V4-Pro supports up to 65,536 output tokens.
 # We set 32,768 as a safe default — high enough for code generation
@@ -42,10 +45,13 @@ class ModelResponse:
     stop_reason: str = ""  # "end_turn" | "tool_use"
     tool_calls: list[dict] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
+    reasoning_content: str = ""
 
     def to_assistant_message(self) -> dict:
         """Build an assistant message from this response for the message history."""
         content: list[dict] = []
+        if self.reasoning_content:
+            content.append({"type": "reasoning", "text": self.reasoning_content})
         if self.text:
             content.append({"type": "text", "text": self.text})
         for tc in self.tool_calls:
@@ -127,6 +133,12 @@ def call_model(
         json=body,
         timeout=120,
     )
+    if response.status_code >= 400:
+        logger.error(
+            "DeepSeek %d: %s",
+            response.status_code,
+            response.text[:500],
+        )
     response.raise_for_status()
     data = response.json()
 
@@ -143,6 +155,7 @@ def _parse_response(data: dict) -> ModelResponse:
     finish_reason = choice.get("finish_reason", "stop")
 
     text = message.get("content", "") or ""
+    reasoning_content = message.get("reasoning_content", "") or ""
     tool_calls: list[dict] = []
 
     if message.get("tool_calls"):
@@ -164,7 +177,13 @@ def _parse_response(data: dict) -> ModelResponse:
         output_tokens=data.get("usage", {}).get("completion_tokens", 0),
     )
 
-    return ModelResponse(text=text, stop_reason=stop_reason, tool_calls=tool_calls, usage=usage)
+    return ModelResponse(
+        text=text,
+        stop_reason=stop_reason,
+        tool_calls=tool_calls,
+        usage=usage,
+        reasoning_content=reasoning_content,
+    )
 
 
 # ── Message Normalization ──────────────────────────────────────────────
@@ -183,6 +202,7 @@ def _normalize_messages(messages: list[dict]) -> list[dict]:
 
         # Complex content with blocks (text, tool_use, tool_result)
         text_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tool_calls_parts: list[dict] = []
         tool_results_parts: list[dict] = []
 
@@ -191,37 +211,42 @@ def _normalize_messages(messages: list[dict]) -> list[dict]:
                 text_parts.append(block)
             elif block.get("type") == "text":
                 text_parts.append(block["text"])
+            elif block.get("type") == "reasoning":
+                reasoning_parts.append(block["text"])
             elif block.get("type") == "tool_use":
                 tool_calls_parts.append(block)
             elif block.get("type") == "tool_result":
                 tool_results_parts.append(block)
 
         if tool_calls_parts and role == "assistant":
-            normalized.append(
-                {
-                    "role": role,
-                    "content": "\n".join(text_parts) if text_parts else None,
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["name"],
-                                "arguments": json.dumps(tc["input"]),
-                            },
-                        }
-                        for tc in tool_calls_parts
-                    ],
-                }
-            )
+            assistant_msg: dict[str, object] = {
+                "role": role,
+                "tool_calls": [
+                    {
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": json.dumps(tc["input"]),
+                        },
+                    }
+                    for tc in tool_calls_parts
+                ],
+            }
+            if reasoning_parts:
+                assistant_msg["reasoning_content"] = "\n".join(reasoning_parts)
+            if text_parts:
+                assistant_msg["content"] = "\n".join(text_parts)
+            normalized.append(assistant_msg)
         elif tool_results_parts and role == "user":
-            normalized.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_results_parts[0].get("tool_use_id", ""),
-                    "content": tool_results_parts[0].get("content", ""),
-                }
-            )
+            for tr in tool_results_parts:
+                normalized.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tr.get("tool_use_id", ""),
+                        "content": tr.get("content", ""),
+                    }
+                )
         else:
             normalized.append(
                 {

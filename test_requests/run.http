@@ -1,0 +1,67 @@
+# Brahma — /run
+# Requires: humao.rest-client
+
+@brahma_host = localhost
+@brahma_port = 8420
+@base_url = http://{{brahma_host}}:{{brahma_port}}
+
+# ── Zero-tool (text only, single turn) ──────────────────────────────────
+
+### Hello World — zero tools, single-turn text response
+POST {{base_url}}/run
+Content-Type: application/json
+
+{
+  "task": "Say hello and introduce yourself in one sentence.",
+  "max_turns": 3
+}
+
+### Simple question — one-word answer
+POST {{base_url}}/run
+Content-Type: application/json
+
+{
+  "task": "What is the capital of France? Answer in one word.",
+  "max_turns": 3
+}
+
+# ── With tools ──────────────────────────────────────────────────────────
+
+### Fibonacci — write + test via tools
+POST {{base_url}}/run
+Content-Type: application/json
+
+{
+  "task": "Write a Python function called 'fibonacci' that returns the nth Fibonacci number. Use write_file to save it to /tmp/fib.py, then verify it works by importing it with terminal.",
+  "max_turns": 10
+}
+
+### One-liner with model override
+POST {{base_url}}/run
+Content-Type: application/json
+
+{
+  "task": "Write a 'hello world' Python script to /tmp/hello_brahma.py using write_file.",
+  "model": "deepseek-chat",
+  "max_turns": 5
+}
+
+# ── Bootstrap loop (forces capability generation) ───────────────────────
+
+### Bootstrap — download image (no image tool → must generate one)
+POST {{base_url}}/run
+Content-Type: application/json
+
+{
+  "task": "I need to download the Python logo from python.org and save it locally. You do not have an image-download tool — bootstrap what you need. Write the tool code, test it, then use it to download https://www.python.org/static/img/python-logo.png to /tmp/python-logo.png.",
+  "max_turns": 30
+}
+
+### Long-running — multi-file CLI project
+POST {{base_url}}/run
+Content-Type: application/json
+
+{
+  "task": "Create a complete Python CLI tool called 'notex' that takes markdown notes and saves them with timestamps. Write it to /tmp/notex/. Include tests in /tmp/notex/test_notex.py. Run the tests.",
+  "max_turns": 40
+}

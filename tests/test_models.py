@@ -180,9 +180,30 @@ class TestNormalizeMessages:
         ]
         result = _normalize_messages(messages)
         assert result[0]["role"] == "assistant"
-        assert result[0]["content"] is None
+        assert "content" not in result[0]  # omitted when no text
         assert len(result[0]["tool_calls"]) == 1
         assert result[0]["tool_calls"][0]["function"]["name"] == "read_file"
+
+    def test_tool_use_with_text_keeps_content(self) -> None:
+        """When a tool-use message also has text, content is included."""
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Let me look that up."},
+                    {
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "search_files",
+                        "input": {"pattern": "TODO"},
+                    },
+                ],
+            }
+        ]
+        result = _normalize_messages(messages)
+        assert result[0]["role"] == "assistant"
+        assert result[0]["content"] == "Let me look that up."
+        assert len(result[0]["tool_calls"]) == 1
 
     def test_tool_result_normalization(self) -> None:
         """Tool-result blocks are normalized to OpenAI tool role."""
@@ -202,6 +223,34 @@ class TestNormalizeMessages:
         assert result[0]["role"] == "tool"
         assert result[0]["tool_call_id"] == "call_1"
         assert result[0]["content"] == "file contents here"
+
+    def test_multiple_tool_results(self) -> None:
+        """Multiple tool results each become their own 'tool' role message."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_1",
+                        "content": "result one",
+                    },
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_2",
+                        "content": "result two",
+                    },
+                ],
+            }
+        ]
+        result = _normalize_messages(messages)
+        assert len(result) == 2
+        assert result[0]["role"] == "tool"
+        assert result[0]["tool_call_id"] == "call_1"
+        assert result[0]["content"] == "result one"
+        assert result[1]["role"] == "tool"
+        assert result[1]["tool_call_id"] == "call_2"
+        assert result[1]["content"] == "result two"
 
     def test_system_message_passes_through(self) -> None:
         """System role messages pass through (DeepSeek supports them)."""

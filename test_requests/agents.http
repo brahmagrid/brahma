@@ -1,0 +1,50 @@
+# Brahma — Agents (spawn, list, child-run)
+# Requires: humao.rest-client
+
+@brahma_host = localhost
+@brahma_port = 8420
+@base_url = http://{{brahma_host}}:{{brahma_port}}
+
+# ── Spawn ───────────────────────────────────────────────────────────────
+
+### Spawn with defaults
+POST {{base_url}}/spawn
+Content-Type: application/json
+
+{}
+
+### Spawn with tool subset
+POST {{base_url}}/spawn
+Content-Type: application/json
+
+{
+  "tools": ["read_file", "write_file", "terminal"]
+}
+
+### Spawn with custom model and prompt
+POST {{base_url}}/spawn
+Content-Type: application/json
+
+{
+  "model": "deepseek-chat",
+  "system_prompt": "You are a math expert. Answer concisely."
+}
+
+# ── List ────────────────────────────────────────────────────────────────
+
+### List all agents (god + children)
+GET {{base_url}}/agents
+
+# ── Child run ───────────────────────────────────────────────────────────
+
+# 1. Send a Spawn request above, copy the agent_id from the response.
+# 2. Paste it below replacing the placeholder, then Send Request.
+
+### Run on child agent
+POST {{base_url}}/agent/{{agent_id}}/run
+Content-Type: application/json
+
+{
+  "task": "List files in /tmp and count them.",
+  "max_turns": 10
+}
