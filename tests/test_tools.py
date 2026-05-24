@@ -329,9 +329,7 @@ class TestSkillManage:
     """Tests for the _skill_manage bootstrap tool."""
 
     @pytest.fixture(autouse=True)
-    def setup_teardown(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def setup_teardown(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Redirect get_skills_dir to a fresh temp directory per test."""
         self.skills_dir = tmp_path / ".brahma" / "skills"
         # Clean any leftover files from sibling tests

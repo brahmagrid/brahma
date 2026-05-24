@@ -69,8 +69,7 @@ class Agent:
             self._accumulate_tokens(response)
 
             logger.debug(
-                "─ Turn %d ─ stop_reason=%s text=%s tool_calls=%d "
-                "tokens(in=%d out=%d total=%d)",
+                "─ Turn %d ─ stop_reason=%s text=%s tool_calls=%d tokens(in=%d out=%d total=%d)",
                 self._turn_count,
                 response.stop_reason,
                 _truncate(response.text, 80),
@@ -81,8 +80,11 @@ class Agent:
             )
 
             if response.stop_reason == "end_turn":
-                logger.info("=== Run complete — %d turns, %d total tokens ===",
-                            self._turn_count, self._token_usage["total"])
+                logger.info(
+                    "=== Run complete — %d turns, %d total tokens ===",
+                    self._turn_count,
+                    self._token_usage["total"],
+                )
                 return response.text
 
             if response.stop_reason == "tool_use":
