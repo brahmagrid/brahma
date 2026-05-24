@@ -1,0 +1,37 @@
+# Brahma — HITL (human-in-the-loop)
+# Requires: humao.rest-client
+
+@brahma_host = localhost
+@brahma_port = 8420
+@base_url = http://{{brahma_host}}:{{brahma_port}}
+
+### Create HITL request
+POST {{base_url}}/hitl/request
+Content-Type: application/json
+
+{
+  "agent_id": "brahma-agent",
+  "prompt": "Should I proceed with deleting all temporary files?",
+  "request_type": "approval",
+  "choices": ["Yes, delete all", "No, keep them", "Show me the list first"]
+}
+
+### List pending HITL requests
+GET {{base_url}}/hitl/pending
+
+# 1. Send Create above, copy request_id from response.
+# 2. Paste it into the {{request_id}} placeholder below.
+
+### Get HITL request details
+GET {{base_url}}/hitl/{{request_id}}
+
+### Respond to HITL request
+POST {{base_url}}/hitl/{{request_id}}/respond
+Content-Type: application/json
+
+{
+  "response": "Yes, delete all"
+}
+
+### Cancel HITL request
+POST {{base_url}}/hitl/{{request_id}}/cancel

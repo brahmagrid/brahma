@@ -1,19 +1,16 @@
 """
-Brahma — Model routing.
+Brahma — Model routing (DeepSeek-only for PoC).
 
-Supports Anthropic and OpenAI-compatible APIs.
-The model string format is "provider:model_name".
+Supports the DeepSeek API via its OpenAI-compatible endpoint.
 
-Examples:
-  - "anthropic:claude-sonnet-4-20250514"
-  - "openai:gpt-4o"
-  - "deepseek:deepseek-chat"
-  - "openrouter:anthropic/claude-sonnet-4"
+Model strings: just the model name (e.g., "deepseek-chat").
+The "deepseek:" prefix is accepted but optional.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -22,6 +19,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+# DeepSeek V4-Pro supports up to 65,536 output tokens.
+# We set 32,768 as a safe default — high enough for code generation
+# in the bootstrap GENERATE step, leaving headroom for tool calls.
+DEEPSEEK_MAX_OUTPUT_TOKENS = 32768
 
 # ── Response Types ─────────────────────────────────────────────────────
 
@@ -42,10 +45,13 @@ class ModelResponse:
     stop_reason: str = ""  # "end_turn" | "tool_use"
     tool_calls: list[dict] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
+    reasoning_content: str = ""
 
     def to_assistant_message(self) -> dict:
         """Build an assistant message from this response for the message history."""
-        content = []
+        content: list[dict] = []
+        if self.reasoning_content:
+            content.append({"type": "reasoning", "text": self.reasoning_content})
         if self.text:
             content.append({"type": "text", "text": self.text})
         for tc in self.tool_calls:
@@ -60,34 +66,9 @@ class ModelResponse:
         return {"role": "assistant", "content": content}
 
 
-# ── Provider Config ────────────────────────────────────────────────────
+# ── DeepSeek API Config ────────────────────────────────────────────────
 
-PROVIDERS = {
-    "anthropic": {
-        "base_url": "https://api.anthropic.com/v1/messages",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "header_name": "x-api-key",
-        "api_version": "2023-06-01",
-    },
-    "openai": {
-        "base_url": "https://api.openai.com/v1/chat/completions",
-        "api_key_env": "OPENAI_API_KEY",
-        "header_name": "Authorization",
-        "header_prefix": "Bearer ",
-    },
-    "deepseek": {
-        "base_url": "https://api.deepseek.com/v1/chat/completions",
-        "api_key_env": "DEEPSEEK_API_KEY",
-        "header_name": "Authorization",
-        "header_prefix": "Bearer ",
-    },
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1/chat/completions",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "header_name": "Authorization",
-        "header_prefix": "Bearer ",
-    },
-}
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1/chat/completions"
 
 
 # ── Public API ─────────────────────────────────────────────────────────
@@ -97,94 +78,33 @@ def call_model(
     model: str,
     messages: list[dict],
     tools: list[dict] | None = None,
-    max_tokens: int = 4096,
+    max_tokens: int = DEEPSEEK_MAX_OUTPUT_TOKENS,
 ) -> ModelResponse:
     """
-    Call an LLM and return a structured response.
+    Call the DeepSeek API and return a structured response.
 
-    model: "provider:model_name" (e.g., "anthropic:claude-sonnet-4-20250514")
-    messages: List of message dicts in Anthropic/OpenAI format.
-    tools: Optional tool schemas.
+    Args:
+        model: Model name (e.g., "deepseek-chat"). The "deepseek:" prefix
+               is stripped if present for backward compatibility.
+        messages: List of message dicts in Anthropic/OpenAI format.
+        tools: Optional tool schemas.
+        max_tokens: Max output tokens (default 8192 for DeepSeek V3).
+
+    Returns:
+        A ModelResponse with text, tool_calls, stop_reason, and usage.
     """
-    provider, model_name = _parse_model(model)
+    model_name = _strip_provider_prefix(model)
 
-    if provider == "anthropic":
-        return _call_anthropic(model_name, messages, tools, max_tokens)
-    else:
-        return _call_openai_compatible(provider, model_name, messages, tools, max_tokens)
-
-
-# ── Provider Implementations ───────────────────────────────────────────
-
-
-def _call_anthropic(
-    model_name: str,
-    messages: list[dict],
-    tools: list[dict] | None,
-    max_tokens: int,
-) -> ModelResponse:
-    cfg = PROVIDERS["anthropic"]
-    api_key = os.getenv(cfg["api_key_env"], "")
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
     if not api_key:
-        raise RuntimeError(f"${cfg['api_key_env']} not set")
-
-    headers = {
-        cfg["header_name"]: api_key,
-        "anthropic-version": cfg["api_version"],
-        "content-type": "application/json",
-    }
-
-    # Convert tools to Anthropic format
-    anthropic_tools = None
-    if tools:
-        anthropic_tools = [
-            {
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "input_schema": t.get("input_schema", {}),
-            }
-            for t in tools
-        ]
-
-    body = {
-        "model": model_name,
-        "max_tokens": max_tokens,
-        "messages": _normalize_messages_for_anthropic(messages),
-    }
-    if anthropic_tools:
-        body["tools"] = anthropic_tools
-
-    response = httpx.post(
-        cfg["base_url"],
-        headers=headers,
-        json=body,
-        timeout=120,
-    )
-    response.raise_for_status()
-    data = response.json()
-
-    return _parse_anthropic_response(data)
-
-
-def _call_openai_compatible(
-    provider: str,
-    model_name: str,
-    messages: list[dict],
-    tools: list[dict] | None,
-    max_tokens: int,
-) -> ModelResponse:
-    cfg = PROVIDERS[provider]
-    api_key = os.getenv(cfg["api_key_env"], "")
-    if not api_key:
-        raise RuntimeError(f"${cfg['api_key_env']} not set")
+        raise RuntimeError("DEEPSEEK_API_KEY not set")
 
     headers = {
         "content-type": "application/json",
+        "Authorization": f"Bearer {api_key}",
     }
-    auth_value = cfg.get("header_prefix", "") + api_key
-    headers[cfg["header_name"]] = auth_value
 
-    # Convert tools to OpenAI format
+    # Convert tools to OpenAI function format
     openai_tools = None
     if tools:
         openai_tools = [
@@ -199,66 +119,44 @@ def _call_openai_compatible(
             for t in tools
         ]
 
-    body = {
+    body: dict = {
         "model": model_name,
         "max_tokens": max_tokens,
-        "messages": _normalize_messages_for_openai(messages),
+        "messages": _normalize_messages(messages),
     }
     if openai_tools:
         body["tools"] = openai_tools
 
     response = httpx.post(
-        cfg["base_url"],
+        DEEPSEEK_BASE_URL,
         headers=headers,
         json=body,
         timeout=120,
     )
+    if response.status_code >= 400:
+        logger.error(
+            "DeepSeek %d: %s",
+            response.status_code,
+            response.text[:500],
+        )
     response.raise_for_status()
     data = response.json()
 
-    return _parse_openai_response(data)
+    return _parse_response(data)
 
 
 # ── Response Parsing ───────────────────────────────────────────────────
 
 
-def _parse_anthropic_response(data: dict) -> ModelResponse:
-    text = ""
-    tool_calls = []
-    stop_reason = data.get("stop_reason", "end_turn")
-
-    for block in data.get("content", []):
-        if block["type"] == "text":
-            text += block["text"]
-        elif block["type"] == "tool_use":
-            tool_calls.append(
-                {
-                    "id": block["id"],
-                    "name": block["name"],
-                    "input": block["input"],
-                }
-            )
-
-    if tool_calls and not text:
-        stop_reason = "tool_use"
-    elif text and not tool_calls:
-        stop_reason = "end_turn"
-
-    usage = Usage(
-        input_tokens=data.get("usage", {}).get("input_tokens", 0),
-        output_tokens=data.get("usage", {}).get("output_tokens", 0),
-    )
-
-    return ModelResponse(text=text, stop_reason=stop_reason, tool_calls=tool_calls, usage=usage)
-
-
-def _parse_openai_response(data: dict) -> ModelResponse:
+def _parse_response(data: dict) -> ModelResponse:
+    """Parse a DeepSeek (OpenAI-compatible) chat completion response."""
     choice = data.get("choices", [{}])[0]
     message = choice.get("message", {})
     finish_reason = choice.get("finish_reason", "stop")
 
     text = message.get("content", "") or ""
-    tool_calls = []
+    reasoning_content = message.get("reasoning_content", "") or ""
+    tool_calls: list[dict] = []
 
     if message.get("tool_calls"):
         for tc in message["tool_calls"]:
@@ -279,34 +177,21 @@ def _parse_openai_response(data: dict) -> ModelResponse:
         output_tokens=data.get("usage", {}).get("completion_tokens", 0),
     )
 
-    return ModelResponse(text=text, stop_reason=stop_reason, tool_calls=tool_calls, usage=usage)
+    return ModelResponse(
+        text=text,
+        stop_reason=stop_reason,
+        tool_calls=tool_calls,
+        usage=usage,
+        reasoning_content=reasoning_content,
+    )
 
 
 # ── Message Normalization ──────────────────────────────────────────────
 
 
-def _normalize_messages_for_anthropic(messages: list[dict]) -> list[dict]:
-    """Ensure messages are in Anthropic format."""
-    normalized = []
-    for msg in messages:
-        role = msg["role"]
-        content = msg["content"]
-
-        # Anthropic doesn't support system messages in the messages array
-        if role == "system":
-            continue
-
-        # String content → [{type: "text", text: ...}]
-        if isinstance(content, str):
-            content = [{"type": "text", "text": content}]
-
-        normalized.append({"role": role, "content": content})
-    return normalized
-
-
-def _normalize_messages_for_openai(messages: list[dict]) -> list[dict]:
-    """Ensure messages are in OpenAI format."""
-    normalized = []
+def _normalize_messages(messages: list[dict]) -> list[dict]:
+    """Convert internal message format to DeepSeek (OpenAI-compatible) format."""
+    normalized: list[dict] = []
     for msg in messages:
         role = msg["role"]
         content = msg["content"]
@@ -315,47 +200,53 @@ def _normalize_messages_for_openai(messages: list[dict]) -> list[dict]:
             normalized.append({"role": role, "content": content})
             continue
 
-        # OpenAI expects string or array of content blocks
-        text_parts = []
-        tool_calls_parts = []
-        tool_results_parts = []
+        # Complex content with blocks (text, tool_use, tool_result)
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        tool_calls_parts: list[dict] = []
+        tool_results_parts: list[dict] = []
 
         for block in content:
             if isinstance(block, str):
                 text_parts.append(block)
             elif block.get("type") == "text":
                 text_parts.append(block["text"])
+            elif block.get("type") == "reasoning":
+                reasoning_parts.append(block["text"])
             elif block.get("type") == "tool_use":
                 tool_calls_parts.append(block)
             elif block.get("type") == "tool_result":
                 tool_results_parts.append(block)
 
         if tool_calls_parts and role == "assistant":
-            normalized.append(
-                {
-                    "role": role,
-                    "content": "\n".join(text_parts) if text_parts else None,
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["name"],
-                                "arguments": json.dumps(tc["input"]),
-                            },
-                        }
-                        for tc in tool_calls_parts
-                    ],
-                }
-            )
+            assistant_msg: dict[str, object] = {
+                "role": role,
+                "tool_calls": [
+                    {
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": json.dumps(tc["input"]),
+                        },
+                    }
+                    for tc in tool_calls_parts
+                ],
+            }
+            if reasoning_parts:
+                assistant_msg["reasoning_content"] = "\n".join(reasoning_parts)
+            if text_parts:
+                assistant_msg["content"] = "\n".join(text_parts)
+            normalized.append(assistant_msg)
         elif tool_results_parts and role == "user":
-            normalized.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_results_parts[0].get("tool_use_id", ""),
-                    "content": tool_results_parts[0].get("content", ""),
-                }
-            )
+            for tr in tool_results_parts:
+                normalized.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tr.get("tool_use_id", ""),
+                        "content": tr.get("content", ""),
+                    }
+                )
         else:
             normalized.append(
                 {
@@ -370,12 +261,8 @@ def _normalize_messages_for_openai(messages: list[dict]) -> list[dict]:
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
-def _parse_model(model: str) -> tuple[str, str]:
-    """Parse 'provider:model_name' into (provider, model_name)."""
+def _strip_provider_prefix(model: str) -> str:
+    """Strip 'deepseek:' prefix if present (backward compat)."""
     if ":" in model:
-        provider, model_name = model.split(":", 1)
-        if provider not in PROVIDERS:
-            raise ValueError(f"Unknown provider: {provider}. Known: {list(PROVIDERS.keys())}")
-        return provider, model_name
-    # Default to DeepSeek if no provider specified
-    return "deepseek", model
+        return model.split(":", 1)[1]
+    return model

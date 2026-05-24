@@ -183,7 +183,7 @@ class AgentRegistry:
 # ── App Factory ────────────────────────────────────────────────────────
 
 
-def create_app(default_model: str = "deepseek:deepseek-chat") -> FastAPI:
+def create_app(default_model: str = "deepseek-v4-pro") -> FastAPI:
     """
     Build the Brahma REST application.
 
@@ -349,18 +349,37 @@ def _now() -> str:
 
 def main() -> None:
     """Start the Brahma REST server."""
-    model = os.getenv("BRAHMA_MODEL", "deepseek:deepseek-chat")
+    model = os.getenv("BRAHMA_MODEL", "deepseek-v4-pro")
     host = os.getenv("BRAHMA_HOST", "0.0.0.0")
     port = int(os.getenv("BRAHMA_PORT", "8420"))
+    log_level = os.getenv("BRAHMA_LOG_LEVEL", "info").lower()
+
+    # Configure Python logging so agent turn-level logs are visible.
+    log_format = "%(asctime)s [%(levelname)-5s] %(name)s — %(message)s"
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format=log_format,
+        datefmt="%H:%M:%S",
+    )
+
+    # Also write logs to a file.
+    log_file = os.getenv("BRAHMA_LOG_FILE", "logs/brahma.log")
+    os.makedirs(os.path.dirname(log_file) or ".", exist_ok=True)
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+    file_handler.setFormatter(logging.Formatter(log_format, datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(file_handler)
 
     app = create_app(default_model=model)
 
     logger.info("Brahma — Bootstrap Agents")
     logger.info("Model: %s", model)
+    logger.info("Log level: %s", log_level)
+    logger.info("Log file: %s", os.path.abspath(log_file))
     logger.info("Listening: http://%s:%s", host, port)
     logger.info("Docs:     http://%s:%s/docs", host, port)
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level=log_level)
 
 
 if __name__ == "__main__":

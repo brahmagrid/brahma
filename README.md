@@ -5,7 +5,7 @@
 > Domain: brahmagrid.io
 
 Brahma is a minimal, self-extending agent runtime with a JSON-over-HTTP interface.
-It starts with 7 bootstrap tools and generates all other capabilities at runtime.
+It starts with 8 bootstrap tools and generates all other capabilities at runtime.
 
 ## Architecture
 
@@ -60,14 +60,13 @@ curl -X POST http://localhost:8420/agent/brahma-abc123/run \
 
 Once running, open http://localhost:8420/docs for the Swagger UI.
 
-## Supported Providers
+## Provider
 
 | Provider | Env Var | Model string |
 |----------|---------|-------------|
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek:deepseek-chat` |
-| Anthropic | `ANTHROPIC_API_KEY` | `anthropic:claude-sonnet-4-20250514` |
-| OpenAI | `OPENAI_API_KEY` | `openai:gpt-4o` |
-| OpenRouter | `OPENROUTER_API_KEY` | `openrouter:anthropic/claude-sonnet-4` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-v4-pro` |
+
+The `deepseek:` prefix is accepted for backward compatibility.
 
 ## Environment Variables
 
@@ -84,9 +83,10 @@ brahma/
 ├── brahma/
 │   ├── __init__.py      # Public API
 │   ├── agent.py         # Agent loop (~150 lines)
-│   ├── tools.py         # 7 bootstrap tools
-│   ├── models.py        # Provider routing
+│   ├── tools.py         # 8 bootstrap tools
+│   ├── models.py        # DeepSeek API client
 │   ├── bootstrap.py     # System prompt
+│   ├── hitl.py           # HITL queue system
 │   └── server.py        # REST API server
 ├── tests/
 ├── pyproject.toml
@@ -96,14 +96,14 @@ brahma/
 ## MVP Status
 
 - [x] Core agent loop
-- [x] 7 bootstrap tools
-- [x] Multi-provider (Anthropic, OpenAI, DeepSeek, OpenRouter)
+- [x] 8 bootstrap tools
+- [x] DeepSeek API integration
 - [x] JSON REST API (FastAPI + uvicorn)
 - [x] Agent spawning (/spawn + /agent/{id}/run)
+- [x] HITL client (Electron + Vite + React)
 - [ ] Adversarial cross-model validation
 - [ ] Context budget monitoring
 - [ ] Auto-splitting on context threshold
 - [ ] Tiered memory (hot/warm/cool/cold)
 - [ ] Layered OverlayFS isolation
 - [ ] Recursive cost governance
-- [ ] HITL client
