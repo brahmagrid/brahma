@@ -350,8 +350,8 @@ class TestContextBudget:
         """context_budget returns used, max, pct, warning, exceeded."""
         agent._max_context_tokens = 10_000
         agent._messages = [
-            {"role": "system", "content": "x" * 4_000},   # ~1000 tokens
-            {"role": "user", "content": "y" * 4_000},      # ~1000 tokens
+            {"role": "system", "content": "x" * 4_000},  # ~1000 tokens
+            {"role": "user", "content": "y" * 4_000},  # ~1000 tokens
         ]
         budget = agent.context_budget
         assert budget["max_tokens"] == 10_000
