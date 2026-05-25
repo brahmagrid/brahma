@@ -271,6 +271,18 @@ def create_app(default_model: str = "deepseek-v4-pro") -> FastAPI:
         """Health check."""
         return HealthResponse(active_agents=registry.count)
 
+    @app.get("/context")
+    def context_budget() -> dict:
+        """Return the god agent's context budget (used, max, percentage)."""
+        entry = registry.get(god_id)
+        return entry.agent.context_budget
+
+    @app.get("/agent/{agent_id}/context")
+    def child_context_budget(agent_id: str) -> dict:
+        """Return a child agent's context budget."""
+        entry = registry.get(agent_id)
+        return entry.agent.context_budget
+
     # ── HITL Endpoints ──────────────────────────────────────────────
 
     @app.post("/hitl/request")

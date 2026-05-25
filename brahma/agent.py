@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from brahma.models import ModelResponse, call_model
+from brahma.models import ModelResponse, call_model, get_model_context_window
 from brahma.tools import ToolRegistry, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -34,15 +34,18 @@ class Agent:
     model: str
     tools: ToolRegistry = field(default_factory=ToolRegistry)
     max_turns: int = 50
+    context_warning_threshold: float = 0.8
 
     # Internal state
     _messages: list[dict] = field(default_factory=list, init=False, repr=False)
     _turn_count: int = field(default=0, init=False, repr=False)
     _token_usage: dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    _max_context_tokens: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize the message history with the system prompt."""
         self._messages = [{"role": "system", "content": self.system_prompt}]
+        self._max_context_tokens = get_model_context_window(self.model)
 
     # ── Public API ──────────────────────────────────────────────────
 
@@ -54,9 +57,16 @@ class Agent:
 
         logger.info("=== Brahma run started ===")
         logger.info("Task: %s", _truncate(task, 200))
+        logger.info(
+            "Context budget: %s window, %.0f%% warning threshold",
+            f"{self._max_context_tokens:,}",
+            self.context_warning_threshold * 100,
+        )
 
         while self._turn_count < self.max_turns:
             self._turn_count += 1
+
+            self._check_context_budget()
 
             logger.debug("─ Turn %d ─ calling %s", self._turn_count, self.model)
 
@@ -112,6 +122,27 @@ class Agent:
 
     # ── Internal ────────────────────────────────────────────────────
 
+    def _check_context_budget(self) -> None:
+        """Check context usage against model window. Warns at threshold, raises at 100%."""
+        used = self.context_tokens
+        limit = self._max_context_tokens
+        pct = used / limit if limit > 0 else 0
+
+        if pct >= 1.0:
+            raise RuntimeError(
+                f"Context budget exceeded: {used:,}/{limit:,} tokens "
+                f"({pct:.0%}). Reduce task size or clear message history."
+            )
+
+        if pct >= self.context_warning_threshold:
+            logger.warning(
+                "Context at %.0f%% (%s/%s tokens) — approaching %s window limit",
+                pct * 100,
+                f"{used:,}",
+                f"{limit:,}",
+                f"{limit:,}",
+            )
+
     def _execute_tools(self, tool_calls: list[dict]) -> list[ToolResult]:
         """Execute each tool call and collect results."""
         results: list[ToolResult] = []
@@ -153,6 +184,20 @@ class Agent:
     def turn_count(self) -> int:
         """Current turn number (increments each LLM call)."""
         return self._turn_count
+
+    @property
+    def context_budget(self) -> dict[str, int | float | bool]:
+        """Return current context budget: used, max, percentage, and warning flag."""
+        used = self.context_tokens
+        limit = self._max_context_tokens
+        pct = used / limit if limit > 0 else 0.0
+        return {
+            "used_tokens": used,
+            "max_tokens": limit,
+            "pct_used": round(pct, 4),
+            "warning": pct >= self.context_warning_threshold,
+            "exceeded": pct >= 1.0,
+        }
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

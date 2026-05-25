@@ -7,9 +7,11 @@ run loop (using a mock call_model).
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import pytest
+from pytest import LogCaptureFixture
 
 from brahma.agent import Agent, _extract_text, _serialize_content, _tool_results_message
 from brahma.models import ModelResponse, Usage
@@ -260,6 +262,103 @@ class TestAccumulateTokens:
         assert agent._token_usage["input"] == 200
         assert agent._token_usage["output"] == 100
         assert agent._token_usage["total"] == 300
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Agent — context budget monitoring
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestContextBudget:
+    """Tests for Agent._check_context_budget."""
+
+    @pytest.fixture
+    def agent(self) -> Agent:
+        """Agent with a tiny context window for testing."""
+        return Agent(system_prompt="test", model="test:model", max_turns=50)
+
+    def test_model_window_set_in_post_init(self) -> None:
+        """_max_context_tokens is set from model on init."""
+        agent = Agent(system_prompt="test", model="deepseek-chat")
+        assert agent._max_context_tokens == 64_000
+
+    def test_warns_at_threshold(self, agent: Agent, caplog: LogCaptureFixture) -> None:
+        """Warns when context exceeds the warning threshold."""
+        agent._max_context_tokens = 10_000
+        agent.context_warning_threshold = 0.5
+        agent._messages = [
+            {"role": "system", "content": "x" * 12_000},
+            {"role": "user", "content": "y" * 12_000},
+        ]
+        caplog.set_level(logging.WARNING)
+        agent._check_context_budget()
+        assert "Context at" in caplog.text
+
+    def test_no_warn_below_threshold(self, agent: Agent, caplog: LogCaptureFixture) -> None:
+        """Does not warn when context is below the warning threshold."""
+        agent._max_context_tokens = 100_000
+        agent.context_warning_threshold = 0.8
+        agent._messages = [
+            {"role": "system", "content": "short"},
+            {"role": "user", "content": "task"},
+        ]
+        caplog.set_level(logging.WARNING)
+        agent._check_context_budget()
+        assert "Context at" not in caplog.text
+
+    def test_raises_at_full(self, agent: Agent) -> None:
+        """Raises RuntimeError when context reaches 100%."""
+        agent._max_context_tokens = 1000
+        agent._messages = [
+            {"role": "system", "content": "x" * 5000},
+        ]
+        with pytest.raises(RuntimeError, match="Context budget exceeded"):
+            agent._check_context_budget()
+
+    def test_threshold_configurable(self, agent: Agent, caplog: LogCaptureFixture) -> None:
+        """Warning threshold can be set to any value 0.0-1.0."""
+        agent._max_context_tokens = 10_000
+        agent.context_warning_threshold = 0.1
+        agent._messages = [
+            {"role": "user", "content": "x" * 5000},
+        ]
+        caplog.set_level(logging.WARNING)
+        agent._check_context_budget()
+        assert "Context at" in caplog.text
+
+    def test_zero_limit_no_division_error(self, agent: Agent) -> None:
+        """Zero _max_context_tokens does not raise ZeroDivisionError."""
+        agent._max_context_tokens = 0
+        agent._messages = [{"role": "user", "content": "x" * 10000}]
+        agent._check_context_budget()
+
+    def test_context_budget_checked_during_run(self, agent: Agent) -> None:
+        """_check_context_budget is called during run()."""
+        mock_resp = ModelResponse(
+            text="done",
+            stop_reason="end_turn",
+            usage=Usage(),
+        )
+        with (
+            patch("brahma.agent.call_model", return_value=mock_resp),
+            patch.object(agent, "_check_context_budget") as mock_check,
+        ):
+            agent.run("test task")
+        mock_check.assert_called()
+
+    def test_context_budget_property(self, agent: Agent) -> None:
+        """context_budget returns used, max, pct, warning, exceeded."""
+        agent._max_context_tokens = 10_000
+        agent._messages = [
+            {"role": "system", "content": "x" * 4_000},   # ~1000 tokens
+            {"role": "user", "content": "y" * 4_000},      # ~1000 tokens
+        ]
+        budget = agent.context_budget
+        assert budget["max_tokens"] == 10_000
+        assert budget["used_tokens"] > 0
+        assert isinstance(budget["pct_used"], float)
+        assert "warning" in budget
+        assert "exceeded" in budget
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-# Brahma — Health
+# Brahma — Health & Diagnostics
 # Requires: humao.rest-client
 
 @brahma_host = localhost
@@ -7,3 +7,9 @@
 
 ### Health Check
 GET {{base_url}}/health
+
+### Context Budget — god agent
+GET {{base_url}}/context
+
+### Context Budget — child agent (replace {agent_id})
+GET {{base_url}}/agent/{{agent_id}}/context
