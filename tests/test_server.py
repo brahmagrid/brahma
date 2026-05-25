@@ -38,6 +38,13 @@ class TestCreateApp:
             mock_agent._token_usage = {"input": 0, "output": 0, "total": 0}
             mock_agent.model = "deepseek:deepseek-chat"
             mock_agent.run.return_value = "mocked result"
+            mock_agent.context_budget = {
+                "used_tokens": 2500,
+                "max_tokens": 1_048_576,
+                "pct_used": 0.0024,
+                "warning": False,
+                "exceeded": False,
+            }
             yield create_app()
 
     @pytest.fixture
@@ -52,6 +59,18 @@ class TestCreateApp:
         data = response.json()
         assert data["status"] == "ok"
         assert data["active_agents"] >= 1  # God agent created
+
+    def test_context_endpoint(self, client: TestClient) -> None:
+        """GET /context returns the god agent's context budget."""
+        response = client.get("/context")
+        assert response.status_code == 200
+        data = response.json()
+        assert "used_tokens" in data
+        assert "max_tokens" in data
+        assert "pct_used" in data
+        assert "warning" in data
+        assert "exceeded" in data
+        assert data["max_tokens"] > 0
 
     def test_root_not_found(self, client: TestClient) -> None:
         """Root path returns 404 (no route defined)."""

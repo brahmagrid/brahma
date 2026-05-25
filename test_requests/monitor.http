@@ -1,0 +1,18 @@
+# Brahma — Monitoring
+# Requires: humao.rest-client
+#
+# Use these before/during/after runs to track context usage.
+# The context endpoint works at any time — no run needed.
+
+@brahma_host = localhost
+@brahma_port = 8420
+@base_url = http://{{brahma_host}}:{{brahma_port}}
+
+### God Agent Context Budget
+GET {{base_url}}/context
+
+### Child Agent Context Budget (replace {agent_id})
+GET {{base_url}}/agent/{{agent_id}}/context
+
+### Health Check
+GET {{base_url}}/health

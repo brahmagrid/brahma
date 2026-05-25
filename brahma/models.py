@@ -26,6 +26,16 @@ logger = logging.getLogger(__name__)
 # in the bootstrap GENERATE step, leaving headroom for tool calls.
 DEEPSEEK_MAX_OUTPUT_TOKENS = 32768
 
+# Model context window sizes (input tokens).
+# Used by Agent.context_tokens for budget monitoring.
+# Source: DeepSeek API docs — https://api-docs.deepseek.com/quick_start/pricing
+MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    "deepseek-v4-pro": 1_048_576,
+    "deepseek-v4-flash": 1_048_576,
+    "deepseek-chat": 64_000,
+    "deepseek-reasoner": 64_000,
+}
+
 # ── Response Types ─────────────────────────────────────────────────────
 
 
@@ -266,3 +276,28 @@ def _strip_provider_prefix(model: str) -> str:
     if ":" in model:
         return model.split(":", 1)[1]
     return model
+
+
+def get_model_context_window(model: str) -> int:
+    """Return the context window size for a model, falling back to env or 64K.
+
+    Resolution order:
+        1. Exact match in MODEL_CONTEXT_WINDOWS
+        2. BRAHMA_CONTEXT_WINDOW env var (if set)
+        3. Conservative default: 64,000 tokens
+    """
+    model_name = _strip_provider_prefix(model)
+    if model_name in MODEL_CONTEXT_WINDOWS:
+        return MODEL_CONTEXT_WINDOWS[model_name]
+
+    env_val = os.getenv("BRAHMA_CONTEXT_WINDOW", "")
+    if env_val:
+        try:
+            return int(env_val)
+        except ValueError:
+            logger.warning(
+                "BRAHMA_CONTEXT_WINDOW=%r is not an integer — using default 64000",
+                env_val,
+            )
+
+    return 64_000
