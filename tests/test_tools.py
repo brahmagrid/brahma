@@ -9,6 +9,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -342,11 +343,13 @@ class TestSkillManage:
         )
 
     def test_save_and_load(self) -> None:
-        """Skills can be saved and loaded back."""
+        """Skills can be saved and loaded back (content is preserved)."""
         save_result = _skill_manage("save", "test-skill", "# Hello World")
         assert "saved" in save_result
         load_result = _skill_manage("load", "test-skill")
-        assert load_result == "# Hello World"
+        assert "# Hello World" in load_result
+        # Metadata header is prepended
+        assert "<!-- skill_meta:" in load_result
 
     def test_load_nonexistent(self) -> None:
         """Loading a missing skill returns an error."""
@@ -386,6 +389,79 @@ class TestSkillManage:
         assert "ERROR" in result
         assert "Unknown action" in result
 
+    def test_save_with_source_downloaded(self) -> None:
+        """Source metadata is included in saved skills."""
+        save_result = _skill_manage(
+            "save", "pdf-tool", "Use pypdf.", source="downloaded",
+            url="https://pypi.org/project/pypdf/",
+        )
+        assert "saved" in save_result
+        assert "downloaded" in save_result
+
+        load_result = _skill_manage("load", "pdf-tool")
+        assert "<!-- skill_meta:" in load_result
+        assert "source=downloaded" in load_result
+        assert "url=https://pypi.org/project/pypdf/" in load_result
+
+    def test_save_with_source_generated(self) -> None:
+        """Generated skills are marked appropriately."""
+        save_result = _skill_manage(
+            "save", "custom-tool", "Custom code.", source="generated",
+        )
+        assert "generated" in save_result
+
+        load_result = _skill_manage("load", "custom-tool")
+        assert "source=generated" in load_result
+
+    def test_list_shows_source_metadata(self) -> None:
+        """Skill listing includes source information from metadata."""
+        _skill_manage("save", "tool-a", "content", source="downloaded")
+        _skill_manage("save", "tool-b", "content", source="generated")
+
+        result = _skill_manage("list", "dummy")
+        assert "tool-a" in result
+        assert "tool-b" in result
+        assert "downloaded" in result
+        assert "generated" in result
+
+    def test_install_action(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Install action pip-installs a package and saves documentation."""
+        import subprocess
+
+        # Mock subprocess.run to simulate a successful pip install
+        mock_result = MagicMock()
+        mock_result.stdout = "Successfully installed requests-2.28.0"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch.object(subprocess, "run", return_value=mock_result):
+            result = _skill_manage(
+                "install", "requests-skill",
+                package="requests",
+                url="https://github.com/psf/requests",
+            )
+
+        assert "installed" in result.lower()
+        assert "requests" in result
+        assert "Skill saved" in result
+
+        # Verify the skill file was created
+        skill_content = _skill_manage("load", "requests-skill")
+        assert "source=downloaded" in skill_content
+        assert "requests" in skill_content
+
+    def test_install_missing_package(self) -> None:
+        """Install with no package name returns an error."""
+        result = _skill_manage("install", "bad-skill", package="")
+        assert "ERROR" in result
+        assert "package" in result.lower()
+
+    def test_save_without_source_defaults_to_generated(self) -> None:
+        """When source is not provided, it defaults to 'generated'."""
+        _skill_manage("save", "default-skill", "content")
+        load_result = _skill_manage("load", "default-skill")
+        assert "source=generated" in load_result
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # bootstrap_tools factory
@@ -395,10 +471,10 @@ class TestSkillManage:
 class TestBootstrapTools:
     """Tests for the bootstrap_tools() factory function."""
 
-    def test_returns_registry_with_8_tools(self) -> None:
-        """The factory returns a registry with all 8 bootstrap tools."""
+    def test_returns_registry_with_9_tools(self) -> None:
+        """The factory returns a registry with all 9 bootstrap tools."""
         registry = bootstrap_tools()
-        assert len(registry) == 8
+        assert len(registry) == 9
 
     def test_all_expected_tools_present(self) -> None:
         """All expected tool names are registered."""
@@ -411,6 +487,7 @@ class TestBootstrapTools:
             "delegate_task",
             "skill_manage",
             "web_fetch",
+            "web_search",
             "hitl_request",
         }
         assert set(registry.list_tools()) == expected
@@ -427,7 +504,7 @@ class TestBootstrapTools:
         """Each tool schema has required fields."""
         registry = bootstrap_tools()
         schemas = registry.schemas()
-        assert len(schemas) == 8
+        assert len(schemas) == 9
         for schema in schemas:
             assert "name" in schema
             assert "description" in schema

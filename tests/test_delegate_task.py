@@ -39,7 +39,7 @@ class TestDelegateTask:
         assert call_kwargs["max_turns"] == 30
         # Child gets all bootstrap tools by default
         assert isinstance(call_kwargs["tools"], ToolRegistry)
-        assert len(call_kwargs["tools"]) == 8
+        assert len(call_kwargs["tools"]) == 9
 
     def test_creates_child_with_subset_of_tools(self) -> None:
         """Child agent gets only the requested tools."""

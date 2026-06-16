@@ -22,6 +22,7 @@ from brahma.tools import (
     skill_manage,  # noqa: F401
     terminal,  # noqa: F401
     web_fetch,  # noqa: F401
+    web_search,  # noqa: F401
     write_file,  # noqa: F401
 )
 from brahma.tools.delegate_task import delegate_task as _delegate_task
@@ -33,6 +34,7 @@ from brahma.tools.search_files import search_files as _search_files
 from brahma.tools.skill_manage import skill_manage as _skill_manage
 from brahma.tools.terminal import terminal as _terminal
 from brahma.tools.web_fetch import web_fetch as _web_fetch
+from brahma.tools.web_search import web_search as _web_search
 from brahma.tools.write_file import WRITE_FILE_SCHEMA
 from brahma.tools.write_file import write_file as _write_file
 
@@ -53,6 +55,7 @@ __all__ = [
     "_skill_manage",
     "_terminal",
     "_web_fetch",
+    "_web_search",
     "_write_file",
     "bootstrap_tools",
     "registry",
